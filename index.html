@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nightfall — v0.1.0</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" tabindex="-1" aria-label="Nightfall playfield"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.1.0</span></div>
+        <div id="timer" class="timer">00:00</div>
+        <div class="level">Lv <span id="level">1</span></div>
+      </div>
+      <div class="hud-bottom">
+        <div id="hp-bar" class="bar hp">
+          <div id="hp-fill" class="fill"></div>
+          <span id="hp-text" class="bar-label">100 / 100</span>
+        </div>
+        <div class="bar xp">
+          <div id="xp-fill" class="fill"></div>
+          <span id="xp-text" class="bar-label">0 / 10</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="overlay-start" class="overlay">
+      <div class="panel">
+        <p class="eyebrow">Survivors prototype · v0.1.0</p>
+        <h1>Nightfall</h1>
+        <p class="lede">Move through the dark. Your stake aims itself. Pick up the gems, live long enough to grow, and don’t let the horde close.</p>
+        <button id="btn-start" type="button">Begin the night</button>
+        <ul class="help">
+          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows move</li>
+          <li>Attack is automatic</li>
+          <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick a level-up</li>
+          <li><kbd>Enter</kbd> starts, and restarts after you fall</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="overlay-level" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="level-title">
+      <div class="panel wide">
+        <p class="eyebrow">The night pauses</p>
+        <h2 id="level-title">Choose a boon</h2>
+        <div id="choices" class="choices"></div>
+      </div>
+    </div>
+
+    <div id="overlay-over" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="over-title">
+      <div class="panel">
+        <p class="eyebrow">The night wins</p>
+        <h2 id="over-title">You fell</h2>
+        <dl id="summary" class="summary"></dl>
+        <button id="btn-restart" type="button">Rise again</button>
+        <p class="hint"><kbd>Enter</kbd> or <kbd>R</kbd></p>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
