@@ -22,6 +22,16 @@ The same server is wired as an npm script (no install):
 npm start
 ```
 
+## Tests
+
+Smoke coverage for v0.2.0 lives on `qa/test-scripts` under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. How to run it is in [qa/README.md](qa/README.md).
+
+```bash
+npm install
+npx playwright install chromium
+npm test
+```
+
 ## How to play
 
 1. Choose **Begin the night** (or press Enter).
@@ -73,5 +83,5 @@ Not in this build yet:
 - Chests, evolutions, bosses, obstacles, or biomes
 - Audio, touch controls, or gamepad
 - Meta progression, accounts, or save data
-- An automated suite on this branch (`qa/test-scripts` is the QA home for that)
+- The smoke suite in `qa/` is the automated check; it does not replace a longer play session
 - Sprite art; characters and effects are drawn on the canvas

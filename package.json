@@ -5,6 +5,11 @@
   "type": "module",
   "description": "Vampire Survivors–inspired browser survival roguelite",
   "scripts": {
-    "start": "python3 -m http.server 8080"
+    "start": "python3 -m http.server 8080",
+    "test": "playwright test --config qa/playwright.config.js",
+    "test:smoke": "playwright test --config qa/playwright.config.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
   }
 }
