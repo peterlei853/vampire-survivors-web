@@ -20,6 +20,9 @@ export class UI {
     this.timerText = document.getElementById("timer");
     this.weaponStake = document.getElementById("weapon-stake");
     this.weaponCenser = document.getElementById("weapon-censer");
+    this.weaponPyre = document.getElementById("weapon-pyre");
+    this.omen = document.getElementById("omen");
+    this.muteButton = document.getElementById("btn-mute");
     this.startOverlay = document.getElementById("overlay-start");
     this.levelOverlay = document.getElementById("overlay-level");
     this.overOverlay = document.getElementById("overlay-over");
@@ -54,6 +57,33 @@ export class UI {
       this.weaponCenser.textContent = "Censer";
       this.weaponCenser.classList.add("locked");
     }
+    if (player.pyre.owned) {
+      this.weaponPyre.textContent = `Pyre ×${player.pyre.charges}`;
+      this.weaponPyre.classList.remove("locked");
+    } else {
+      this.weaponPyre.textContent = "Pyre";
+      this.weaponPyre.classList.add("locked");
+    }
+    this.setOmen(game.omen);
+  }
+
+  setMuted(muted) {
+    const button = this.muteButton;
+    if (!button) return;
+    button.textContent = muted ? "Muted" : "Sound on";
+    button.setAttribute("aria-pressed", muted ? "true" : "false");
+    button.classList.toggle("is-muted", muted);
+  }
+
+  setOmen(text) {
+    if (!this.omen) return;
+    if (!text) {
+      this.omen.textContent = "";
+      this.omen.classList.add("hidden");
+      return;
+    }
+    this.omen.textContent = text;
+    this.omen.classList.remove("hidden");
   }
 
   showLevelUp(player, choices, onPick) {
@@ -61,7 +91,10 @@ export class UI {
     choices.forEach((upgrade, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = upgrade.family === "censer" ? "choice choice-weapon" : "choice";
+      let tone = "choice";
+      if (upgrade.family === "censer") tone = "choice choice-weapon";
+      else if (upgrade.family === "pyre") tone = "choice choice-pyre";
+      button.className = tone;
       const key = document.createElement("span");
       key.className = "choice-key";
       key.textContent = String(index + 1);

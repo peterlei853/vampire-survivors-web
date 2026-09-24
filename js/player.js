@@ -1,6 +1,7 @@
-/** Survivor stats. Weapons fire from Game; this owns movement, XP, and the censer. */
+/** Survivor stats. Weapons fire from Game; this owns movement, XP, and weapons. */
 
 import { Censer } from "./censer.js";
+import { Pyre } from "./pyre.js";
 
 /**
  * XP required to leave `level`.
@@ -36,6 +37,7 @@ export class Player {
     this.invuln = 0;
     this.aim = 0;
     this.censer = new Censer();
+    this.pyre = new Pyre();
   }
 
   update(dt, axis) {

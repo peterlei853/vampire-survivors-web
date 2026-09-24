@@ -10,20 +10,28 @@ const ui = new UI();
 const game = new Game(canvas, input, ui);
 
 // Live handle for QA scripts. Not a save file and not a secret.
-// Useful fields: state, time, kills, player (xp, level, censer), enemies,
-// spawnInterval(), weaponSummary(), night pressure via weaponSummary().threat.
+// Useful fields: state, time, kills, player (xp, level, censer, pyre), enemies,
+// eliteState, spawnInterval(), weaponSummary() (stake, censer, pyre, elite, threat).
 window.__game = game;
+ui.setMuted(game.audio.muted);
 
 function begin() {
+  game.audio.unlock();
   game.start();
   canvas.focus();
 }
 
 document.getElementById("btn-start").addEventListener("click", begin);
 document.getElementById("btn-restart").addEventListener("click", begin);
+document.getElementById("btn-mute").addEventListener("click", () => game.toggleMute());
 
 window.addEventListener("keydown", (event) => {
   if (event.repeat) return;
+  if (event.code === "KeyM") {
+    event.preventDefault();
+    game.toggleMute();
+    return;
+  }
   if (game.state === "menu" && (event.code === "Enter" || event.code === "Space")) {
     event.preventDefault();
     begin();

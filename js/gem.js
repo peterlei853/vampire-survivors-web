@@ -5,8 +5,9 @@ export class Gem {
     this.x = x;
     this.y = y;
     this.value = value;
-    this.size = value >= 5 ? 8 : 6;
-    this.color = value >= 5 ? "#e6c36a" : "#7ddec0";
+    this.size = value >= 20 ? 13 : value >= 5 ? 8 : 6;
+    this.color = value >= 20 ? "#fff1c2" : value >= 5 ? "#e6c36a" : "#7ddec0";
+    this.rich = value >= 20;
     this.bob = Math.random() * Math.PI * 2;
     this.age = 0;
   }
@@ -40,6 +41,12 @@ export class Gem {
     ctx.save();
     ctx.translate(this.x, this.y + bob);
     ctx.rotate(Math.PI / 4);
+    if (this.rich) {
+      ctx.fillStyle = "rgba(255, 214, 120, 0.28)";
+      ctx.beginPath();
+      ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
     ctx.fillRect(-this.size / 2 + 2, -this.size / 2 + 4, this.size, this.size);
     ctx.fillStyle = this.color;

@@ -30,7 +30,7 @@ async function beginNight(page) {
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.2\.0/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.3\.0/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
