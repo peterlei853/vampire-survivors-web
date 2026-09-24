@@ -184,6 +184,16 @@ function rollUpgrades(player, count) {
     picks.push(pool[index].upgrade);
     pool.splice(index, 1);
   }
+  // Keep the second weapon visible until the player actually takes it.
+  const censerUnlock = UPGRADES.find((upgrade) => upgrade.id === "censer");
+  if (
+    censerUnlock
+    && (!censerUnlock.available || censerUnlock.available(player))
+    && !picks.some((upgrade) => upgrade.id === "censer")
+  ) {
+    picks.unshift(censerUnlock);
+    if (picks.length > count) picks.pop();
+  }
   return picks;
 }
 
@@ -193,13 +203,13 @@ function rollUpgrades(player, count) {
  * Kills add a smaller nudge (capped) so a strong run sees a thicker night
  * without an early death spiral.
  *
- * Rough shape with a normal kill pace: ~0 at the open, ~1 near a minute,
- * ~3 near two minutes, then it keeps climbing.
+ * Rough shape with a normal kill pace: near 0 through the first half-minute,
+ * still gentle at one minute, then climbing hard by two minutes.
  */
 export function nightThreat(time, kills) {
   const minutes = Math.max(0, time) / 60;
-  const fromTime = minutes * 0.42 + minutes * minutes * 0.62;
-  const fromKills = Math.min(1.25, Math.max(0, kills) / 160) * 0.45;
+  const fromTime = minutes * 0.28 + Math.max(0, minutes - 0.75) ** 2 * 1.35;
+  const fromKills = Math.min(1.1, Math.max(0, kills) / 220) * 0.35;
   return fromTime + fromKills;
 }
 
@@ -375,9 +385,9 @@ export class Game {
 
   pickType() {
     const t = this.time;
-    if (t < 20) return "shambler";
-    const bruteChance = t < 55 ? 0 : Math.min(0.3, (t - 55) / 250);
-    const batChance = Math.min(0.5, (t - 20) / 160);
+    if (t < 32) return "shambler";
+    const bruteChance = t < 75 ? 0 : Math.min(0.32, (t - 75) / 220);
+    const batChance = Math.min(0.48, (t - 32) / 180);
     const roll = Math.random();
     if (roll < bruteChance) return "brute";
     if (roll < bruteChance + batChance) return "bat";

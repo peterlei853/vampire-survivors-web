@@ -11,9 +11,9 @@ export const ENEMY_TYPES = {
 export class Enemy {
   constructor(typeName, x, y, time) {
     const base = ENEMY_TYPES[typeName] || ENEMY_TYPES.shambler;
-    const hpScale = 1 + time / 75;
-    const speedScale = 1 + Math.min(0.55, time / 200);
-    const dmgScale = 1 + time / 170;
+    const hpScale = 1 + Math.max(0, time - 30) / 110;
+    const speedScale = 1 + Math.min(0.5, Math.max(0, time - 40) / 220);
+    const dmgScale = 1 + Math.max(0, time - 45) / 200;
     this.id = nextId++;
     this.type = typeName;
     this.x = x;

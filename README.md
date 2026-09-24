@@ -26,9 +26,9 @@ npm start
 
 1. Choose **Begin the night** (or press Enter).
 2. Move with **WASD** or the **arrow keys**. The stake aims and fires on its own at the nearest foe.
-3. Enemies walk in from off-screen and chase you. The first seconds are shamblers only. Bats arrive after about 20 seconds, brutes after about 55. Contact hurts. You get a short invulnerability blink after each hit.
+3. Enemies walk in from off-screen and chase you. The first half-minute is shamblers only. Bats arrive after about 30 seconds, brutes after about 75. Contact hurts. You get a short invulnerability blink after each hit.
 4. Fallen enemies drop gems. Nearby gems pull in immediately. Gems left behind start homing after a short delay so a long kite still pays off. Picking them up grants XP.
-5. Filling the XP bar levels you up and pauses the night. Pick one of three boons (click, or press **1**, **2**, or **3**). A level also restores a little health. **Warding Censer** is offered often until you take it. Later boons add censers, heat, or reach. Stake boons still sharpen the bolts.
+5. Filling the XP bar levels you up and pauses the night. Pick one of three boons (click, or press **1**, **2**, or **3**). A level also restores a little health. **Warding Censer** is one of the three choices on every level-up until you take it. Later boons add censers, heat, or reach. Stake boons still sharpen the bolts.
 6. Spawn rate, batch size, and the crowd cap rise with time, plus a smaller share of your kills. At 0 HP the run ends. **Rise again**, **Enter**, or **R** starts a new night.
 
 HUD, from the top: kills and version, survival timer with weapon chips, level. Along the bottom: HP, then XP. The censer chip stays dim until you wake one.
@@ -65,7 +65,7 @@ In this build:
 
 - Two auto weapons. The stake is owned from the start. The **Warding Censer** is unlocked and upgraded from level-up boons. Its spokes sweep a circle and burn enemies they pass, including ones in melee.
 - XP to leave level 1 is 40 (twenty shambler gems). The cost then bends upward (`40 + 18n + 2.2n²`, `n` = level − 1) so the first level is a short fight and a few minutes of play still reaches the mid levels.
-- Spawn pressure eases in. Opening cap is about a dozen, interval about 1.7s, one enemy per wave, shamblers only, four already on the walk in. By two minutes the interval, batch size, and cap have all climbed. Kills contribute, but that term is capped so a fast start cannot flood the first half-minute.
+- Spawn pressure eases in. Opening cap is about a dozen, interval about 1.7s, one enemy per wave, shamblers only, four already on the walk in. The first minute stays in that band. By two minutes the interval, batch size, and cap have climbed, and after that the field fills toward a cap of 140. Kills contribute, but that term is capped so a fast start cannot flood the opening.
 - `window.__game` is a live handle for manual checks. It is not persisted and holds no secrets. Besides `state`, `player`, `enemies`, `gems`, `kills`, and `time`, `weaponSummary()` returns stake stats, censer stats, and the current threat value. `player.censer` is the weapon itself (`owned`, `orbs`, `damage`, `radius`).
 
 Not in this build yet:
