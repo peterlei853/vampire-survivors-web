@@ -1,5 +1,6 @@
-/** World loop: spawn, chase, stake, censer, gems, level-up, camera. */
+/** World loop: spawn, chase, stake, censer, pyre, warden, gems, level-up, camera. */
 
+import { AudioBus } from "./audio.js";
 import {
   CENSER_DAMAGE_STEP,
   CENSER_MAX_DAMAGE,
@@ -11,6 +12,28 @@ import { Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
 import { Player } from "./player.js";
 import { Projectile } from "./projectile.js";
+import {
+  PYRE_DAMAGE_STEP,
+  PYRE_MAX_CHARGES,
+  PYRE_MAX_DAMAGE,
+  PYRE_MAX_RADIUS,
+  PYRE_RADIUS_STEP,
+  PyreFlask,
+  PyrePool,
+} from "./pyre.js";
+
+/** Warning never starts before this. The body arrives one telegraph later. */
+export const ELITE_MIN_TIME = 90;
+/** Quiet runs meet the warden here, still inside the 90–120s window. */
+export const ELITE_TIME = 100;
+/** A kill-heavy run can meet it as soon as the window opens. */
+export const ELITE_KILLS = 80;
+export const ELITE_WARN = 2.4;
+
+export function eliteDue(time, kills) {
+  if (time < ELITE_MIN_TIME) return false;
+  return time >= ELITE_TIME || kills >= ELITE_KILLS;
+}
 
 const UPGRADES = [
   {
@@ -157,6 +180,64 @@ const UPGRADES = [
       player.censer.addRadius();
     },
   },
+  {
+    id: "pyre",
+    name: "Cinder Pyre",
+    blurb: "A flask bursts on the nearest foe and keeps burning.",
+    family: "pyre",
+    available: (player) => !player.pyre.owned,
+    weight: () => 5,
+    detail() {
+      return "Unlock a pyre pool (5 damage a tick)";
+    },
+    apply(player) {
+      player.pyre.unlock();
+    },
+  },
+  {
+    id: "pyre-charges",
+    name: "Another Flask",
+    blurb: "Another flask leaves the hand with the first.",
+    family: "pyre",
+    available: (player) => player.pyre.owned,
+    maxed: (player) => player.pyre.charges >= PYRE_MAX_CHARGES,
+    detail(player) {
+      return `Flasks ${player.pyre.charges} → ${player.pyre.charges + 1}`;
+    },
+    apply(player) {
+      player.pyre.addCharge();
+    },
+  },
+  {
+    id: "pyre-heat",
+    name: "Hotter Pitch",
+    blurb: "The pool bites harder each time it flares.",
+    family: "pyre",
+    available: (player) => player.pyre.owned,
+    maxed: (player) => player.pyre.damage >= PYRE_MAX_DAMAGE,
+    detail(player) {
+      const next = Math.min(PYRE_MAX_DAMAGE, player.pyre.damage + PYRE_DAMAGE_STEP);
+      return `Pyre damage ${player.pyre.damage} → ${next}`;
+    },
+    apply(player) {
+      player.pyre.addDamage();
+    },
+  },
+  {
+    id: "pyre-reach",
+    name: "Wider Pyre",
+    blurb: "The fire spreads farther from where the flask lands.",
+    family: "pyre",
+    available: (player) => player.pyre.owned,
+    maxed: (player) => player.pyre.radius >= PYRE_MAX_RADIUS,
+    detail(player) {
+      const next = Math.min(PYRE_MAX_RADIUS, player.pyre.radius + PYRE_RADIUS_STEP);
+      return `Pool radius ${player.pyre.radius} → ${next}`;
+    },
+    apply(player) {
+      player.pyre.addRadius();
+    },
+  },
 ];
 
 function rollUpgrades(player, count) {
@@ -184,15 +265,33 @@ function rollUpgrades(player, count) {
     picks.push(pool[index].upgrade);
     pool.splice(index, 1);
   }
-  // Keep the second weapon visible until the player actually takes it.
-  const censerUnlock = UPGRADES.find((upgrade) => upgrade.id === "censer");
-  if (
-    censerUnlock
-    && (!censerUnlock.available || censerUnlock.available(player))
-    && !picks.some((upgrade) => upgrade.id === "censer")
-  ) {
-    picks.unshift(censerUnlock);
-    if (picks.length > count) picks.pop();
+  // Keep each locked weapon on the table until the player actually takes it.
+  // Unshift pyre first, then the censer, so the censer stays in front.
+  const pinned = ["pyre", "censer"];
+  for (const id of pinned) {
+    const unlock = UPGRADES.find((upgrade) => upgrade.id === id);
+    if (!unlock) continue;
+    if (unlock.available && !unlock.available(player)) continue;
+    if (unlock.maxed && unlock.maxed(player)) continue;
+    if (picks.some((upgrade) => upgrade.id === id)) continue;
+    picks.unshift(unlock);
+  }
+  const pinIds = new Set(pinned);
+  while (picks.length > count) {
+    let removed = false;
+    for (let i = picks.length - 1; i >= 0; i -= 1) {
+      const upgrade = picks[i];
+      const stillPinned = pinIds.has(upgrade.id)
+        && (!upgrade.available || upgrade.available(player));
+      if (stillPinned) continue;
+      picks.splice(i, 1);
+      removed = true;
+      break;
+    }
+    if (!removed) {
+      picks.length = count;
+      break;
+    }
   }
   return picks;
 }
@@ -292,6 +391,7 @@ export class Game {
     this.input = input;
     this.ui = ui;
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.audio = new AudioBus();
     this.dpr = 1;
     this.viewW = 800;
     this.viewH = 600;
@@ -306,6 +406,8 @@ export class Game {
     this.player = new Player(0, 0);
     this.enemies = [];
     this.projectiles = [];
+    this.flasks = [];
+    this.pools = [];
     this.gems = [];
     this.particles = [];
     this.floaters = [];
@@ -317,6 +419,15 @@ export class Game {
     this.spawnTimer = 2.2;
     this.shake = 0;
     this.hurtFlash = 0;
+    this.eliteState = "idle";
+    this.eliteWarning = null;
+    this.omen = "";
+    this.omenTimer = 0;
+  }
+
+  toggleMute() {
+    this.audio.toggle();
+    this.ui.setMuted(this.audio.muted);
   }
 
   resize() {
@@ -354,6 +465,8 @@ export class Game {
 
   update(dt) {
     this.time += dt;
+    this.maybeElite();
+    this.updateElite(dt);
     this.player.update(dt, this.input.axis());
     this.trackAim();
     this.pruneFarEnemies();
@@ -367,6 +480,8 @@ export class Game {
     this.tryAttack();
     this.updateProjectiles(dt);
     this.updateCenser(dt);
+    this.updatePyre(dt);
+    this.resolvePulses();
     this.reapEnemies();
     this.updateGems(dt);
     this.resolveContact();
@@ -404,19 +519,20 @@ export class Game {
 
   makeRoomForSpawn() {
     if (this.enemies.length < this.maxEnemies()) return;
-    let farIndex = 0;
+    let farIndex = -1;
     let farDist = -1;
     const px = this.player.x;
     const py = this.player.y;
     for (let i = 0; i < this.enemies.length; i += 1) {
       const enemy = this.enemies[i];
+      if (enemy.type === "warden") continue;
       const dist = (enemy.x - px) ** 2 + (enemy.y - py) ** 2;
       if (dist > farDist) {
         farDist = dist;
         farIndex = i;
       }
     }
-    this.enemies.splice(farIndex, 1);
+    if (farIndex >= 0) this.enemies.splice(farIndex, 1);
   }
 
   spawnAround(typeName) {
@@ -438,7 +554,9 @@ export class Game {
     const limit2 = limit * limit;
     const px = this.player.x;
     const py = this.player.y;
-    this.enemies = this.enemies.filter((enemy) => (enemy.x - px) ** 2 + (enemy.y - py) ** 2 <= limit2);
+    this.enemies = this.enemies.filter((enemy) => (
+      enemy.type === "warden" || (enemy.x - px) ** 2 + (enemy.y - py) ** 2 <= limit2
+    ));
   }
 
   trackAim() {
@@ -504,6 +622,7 @@ export class Game {
         enemy.y += ny * 7;
         shot.hitIds.add(enemy.id);
         shot.hitsLeft -= 1;
+        this.audio.play("hit");
         this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(shot.damage), "#fff1c2"));
       }
       if (shot.hitsLeft > 0 && shot.life > 0) kept.push(shot);
@@ -523,12 +642,127 @@ export class Game {
       enemy.hp -= censer.damage;
       enemy.hitFlash = 0.09;
       enemy.censerCd = censer.hitCooldown;
+      this.audio.play("hit");
       this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(censer.damage), "#d7e8f8"));
     }
   }
 
+  updatePyre(dt) {
+    const pyre = this.player.pyre;
+    if (pyre.owned && pyre.timer > 0) pyre.timer = Math.max(0, pyre.timer - dt);
+    if (pyre.owned && pyre.timer <= 0) {
+      const living = this.enemies.filter((enemy) => enemy.hp > 0);
+      if (living.length > 0) {
+        pyre.timer = pyre.interval;
+        const targets = nearest(this.player, living, pyre.charges);
+        const spec = {
+          radius: pyre.radius,
+          damage: pyre.damage,
+          duration: pyre.duration,
+          tick: pyre.tick,
+        };
+        for (const enemy of targets) {
+          this.flasks.push(new PyreFlask(this.player.x, this.player.y, enemy.x, enemy.y, spec));
+        }
+      }
+    }
+
+    const flying = [];
+    for (const flask of this.flasks) {
+      flask.update(dt);
+      if (flask.done()) {
+        const spec = flask.spec;
+        this.pools.push(new PyrePool(flask.tx, flask.ty, spec.radius, spec.damage, spec.duration, spec.tick));
+      } else {
+        flying.push(flask);
+      }
+    }
+    this.flasks = flying;
+
+    const burning = [];
+    for (const pool of this.pools) {
+      pool.update(dt);
+      if (pool.life <= 0) continue;
+      for (const enemy of this.enemies) {
+        if (enemy.hp <= 0 || !pool.ready(enemy)) continue;
+        const reach = pool.radius + enemy.radius * 0.15;
+        if (Math.hypot(enemy.x - pool.x, enemy.y - pool.y) > reach) continue;
+        enemy.hp -= pool.damage;
+        enemy.hitFlash = 0.08;
+        pool.mark(enemy);
+        this.audio.play("hit");
+        this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(pool.damage), "#ffc48a"));
+      }
+      burning.push(pool);
+    }
+    this.pools = burning;
+    if (this.pools.length > 24) this.pools.splice(0, this.pools.length - 24);
+  }
+
+  maybeElite() {
+    if (this.eliteState !== "idle") return;
+    if (!eliteDue(this.time, this.kills)) return;
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.min(this.viewW, this.viewH) * 0.36;
+    this.eliteWarning = {
+      x: this.player.x + Math.cos(angle) * dist,
+      y: this.player.y + Math.sin(angle) * dist,
+      time: 0,
+      duration: ELITE_WARN,
+    };
+    this.eliteState = "warning";
+    this.omen = "The Warden rises";
+    this.omenTimer = 0;
+    if (!this.reduceMotion) this.shake = 8;
+  }
+
+  updateElite(dt) {
+    if (this.eliteState === "warning" && this.eliteWarning) {
+      this.eliteWarning.time += dt;
+      if (this.eliteWarning.time >= this.eliteWarning.duration) this.spawnWarden();
+    }
+    if (this.omenTimer > 0) {
+      this.omenTimer -= dt;
+      if (this.omenTimer <= 0 && this.eliteState !== "warning") this.omen = "";
+    }
+  }
+
+  spawnWarden() {
+    const spot = this.eliteWarning;
+    if (!spot || this.eliteState !== "warning") return;
+    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time));
+    this.eliteState = "alive";
+    this.omen = "The Warden is here";
+    this.omenTimer = 2.2;
+    if (!this.reduceMotion) this.shake = 18;
+    this.floaters.push(new Popup(spot.x, spot.y - 46, "WARDEN", "#ffb4a8"));
+  }
+
+  resolvePulses() {
+    const player = this.player;
+    for (const enemy of this.enemies) {
+      const pulse = enemy.pulse;
+      if (!pulse) continue;
+      enemy.pulse = null;
+      const dist = Math.hypot(player.x - pulse.x, player.y - pulse.y);
+      if (dist > pulse.radius + player.radius || player.invuln > 0) continue;
+      this.hurt(pulse.damage);
+    }
+  }
+
+  hurt(amount) {
+    const player = this.player;
+    player.hp -= amount;
+    player.invuln = 0.72;
+    if (!this.reduceMotion) this.shake = Math.max(this.shake, 12);
+    this.hurtFlash = 0.4;
+    this.floaters.push(new Popup(player.x, player.y - 20, `-${amount}`, "#ff9a92"));
+    this.audio.play("hurt");
+  }
+
   weaponSummary() {
     const censer = this.player.censer;
+    const pyre = this.player.pyre;
     return {
       stake: {
         damage: this.player.damage,
@@ -542,6 +776,14 @@ export class Game {
         damage: censer.damage,
         radius: censer.radius,
       },
+      pyre: {
+        owned: pyre.owned,
+        charges: pyre.charges,
+        damage: pyre.damage,
+        radius: pyre.radius,
+        interval: pyre.interval,
+      },
+      elite: this.eliteState,
       threat: nightThreat(this.time, this.kills),
     };
   }
@@ -554,8 +796,19 @@ export class Game {
         continue;
       }
       this.kills += 1;
-      this.gems.push(new Gem(enemy.x, enemy.y, enemy.xp));
-      for (let i = 0; i < 7; i += 1) this.particles.push(new Spark(enemy.x, enemy.y, enemy.color));
+      if (enemy.type === "warden") {
+        this.eliteState = "fallen";
+        this.omen = "The Warden falls";
+        this.omenTimer = 2.4;
+        this.dropWardenHoard(enemy);
+      } else {
+        this.gems.push(new Gem(enemy.x, enemy.y, enemy.xp));
+      }
+      const sparks = enemy.type === "warden" ? 18 : 7;
+      for (let i = 0; i < sparks; i += 1) {
+        const color = enemy.type === "warden" && i % 2 === 0 ? "#f2e2a0" : enemy.color;
+        this.particles.push(new Spark(enemy.x, enemy.y, color));
+      }
     }
     this.enemies = alive;
     this.trimGems();
@@ -574,11 +827,24 @@ export class Game {
     this.gems.length = cap;
   }
 
+  dropWardenHoard(enemy) {
+    this.gems.push(new Gem(enemy.x, enemy.y, 30));
+    for (let i = 0; i < 6; i += 1) {
+      const angle = (i / 6) * Math.PI * 2;
+      this.gems.push(new Gem(
+        enemy.x + Math.cos(angle) * 24,
+        enemy.y + Math.sin(angle) * 24,
+        5,
+      ));
+    }
+  }
+
   updateGems(dt) {
     const kept = [];
     for (const gem of this.gems) {
       gem.update(dt, this.player);
       if (gem.collectedBy(this.player)) {
+        this.audio.play("gem");
         this.pendingLevels += this.player.gainXp(gem.value).length;
       } else {
         kept.push(gem);
@@ -607,13 +873,7 @@ export class Game {
       player.y += ny * overlap * 0.8;
       enemy.x -= nx * overlap * 0.45;
       enemy.y -= ny * overlap * 0.45;
-      if (player.invuln <= 0) {
-        player.hp -= enemy.damage;
-        player.invuln = 0.72;
-        if (!this.reduceMotion) this.shake = 12;
-        this.hurtFlash = 0.38;
-        this.floaters.push(new Popup(player.x, player.y - 20, `-${enemy.damage}`, "#ff9a92"));
-      }
+      if (player.invuln <= 0) this.hurt(enemy.damage);
     }
   }
 
@@ -680,6 +940,7 @@ export class Game {
       return;
     }
     this.state = "levelup";
+    this.audio.play("level");
     this.ui.showLevelUp(this.player, this.currentChoices, (index) => this.chooseUpgrade(index));
   }
 
@@ -704,12 +965,17 @@ export class Game {
     this.player.hp = 0;
     this.pendingLevels = 0;
     this.currentChoices = [];
+    this.audio.play("death");
     const censer = this.player.censer;
+    const pyre = this.player.pyre;
+    const weapons = ["Stake"];
+    if (censer.owned) weapons.push(`Censer ×${censer.orbs}`);
+    if (pyre.owned) weapons.push(`Pyre ×${pyre.charges}`);
     this.ui.showGameOver({
       time: this.time,
       level: this.player.level,
       kills: this.kills,
-      weapons: censer.owned ? `Stake · Censer ×${censer.orbs}` : "Stake",
+      weapons: weapons.join(" · "),
     });
   }
 
@@ -731,6 +997,9 @@ export class Game {
     this.drawBackground(ctx, w, h, shakeX, shakeY);
     ctx.save();
     ctx.translate(w / 2 - this.camera.x + shakeX, h / 2 - this.camera.y + shakeY);
+    for (const pool of this.pools) pool.draw(ctx, this.anim);
+    this.drawEliteWarning(ctx);
+    this.drawWardenMarks(ctx);
     for (const gem of this.gems) gem.draw(ctx);
     for (const spark of this.particles) spark.draw(ctx);
     const actors = this.enemies.slice();
@@ -738,6 +1007,7 @@ export class Game {
     actors.sort((a, b) => a.y - b.y);
     for (const actor of actors) actor.draw(ctx, this.anim);
     this.player.censer.draw(ctx, this.player, this.anim);
+    for (const flask of this.flasks) flask.draw(ctx);
     for (const shot of this.projectiles) shot.draw(ctx);
     for (const popup of this.floaters) popup.draw(ctx);
     ctx.restore();
@@ -771,6 +1041,58 @@ export class Game {
     }
   }
 
+  drawEliteWarning(ctx) {
+    if (this.eliteState !== "warning" || !this.eliteWarning) return;
+    const warn = this.eliteWarning;
+    const t = Math.max(0, Math.min(1, warn.time / warn.duration));
+    const pulse = 0.5 + 0.5 * Math.sin(warn.time * 14);
+    ctx.save();
+    ctx.translate(warn.x, warn.y);
+    ctx.fillStyle = `rgba(120, 12, 24, ${0.18 + t * 0.28})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 18 + t * 40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255, 72, 56, ${0.35 + pulse * 0.5})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 26 + t * 30, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255, 210, 180, ${0.3 + t * 0.4})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-16, 0);
+    ctx.lineTo(16, 0);
+    ctx.moveTo(0, -16);
+    ctx.lineTo(0, 16);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawWardenMarks(ctx) {
+    for (const enemy of this.enemies) {
+      if (enemy.type !== "warden" || !enemy.mark) continue;
+      const mark = enemy.mark;
+      const winding = enemy.phase === "windup" && enemy.windupMax > 0;
+      const t = winding ? 1 - enemy.windup / enemy.windupMax : 1;
+      ctx.save();
+      ctx.translate(mark.x, mark.y);
+      ctx.fillStyle = winding
+        ? `rgba(160, 16, 28, ${0.08 + 0.22 * t})`
+        : "rgba(255, 180, 120, 0.28)";
+      ctx.beginPath();
+      ctx.arc(0, 0, mark.radius * (winding ? Math.max(0.2, t) : 1), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = winding
+        ? `rgba(255, 70, 54, ${0.4 + 0.55 * t})`
+        : "rgba(255, 226, 190, 0.9)";
+      ctx.lineWidth = winding ? 2 + t * 3 : 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, mark.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   drawVignette(ctx, w, h) {
     const reach = Math.max(w, h) * 0.68;
     const gradient = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, reach);
@@ -778,6 +1100,11 @@ export class Game {
     gradient.addColorStop(1, "rgba(0, 0, 0, 0.5)");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
+    if (this.eliteState === "warning" && this.eliteWarning) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.eliteWarning.time * 10);
+      ctx.fillStyle = `rgba(120, 16, 24, ${0.06 + pulse * 0.1})`;
+      ctx.fillRect(0, 0, w, h);
+    }
     if (this.hurtFlash > 0) {
       ctx.fillStyle = `rgba(130, 18, 28, ${this.hurtFlash})`;
       ctx.fillRect(0, 0, w, h);
