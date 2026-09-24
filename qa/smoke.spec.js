@@ -161,6 +161,139 @@ test("falling and rising again starts a fresh night", async ({ page }) => {
   await expectFreshNight(page);
 });
 
+test("a forced level-up offers Cinder Pyre and taking it arms the weapon", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await expect(page.locator("#weapon-pyre")).toHaveClass(/locked/);
+  await expect(page.locator("#weapon-pyre")).toHaveText("Pyre");
+
+  const queued = await page.evaluate(() => {
+    const game = window.__game;
+    const gained = game.player.gainXp(game.player.xpToNext);
+    game.pendingLevels += gained.length;
+    return { gained, pending: game.pendingLevels };
+  });
+  expect(queued.gained).toEqual([2]);
+  expect(queued.pending).toBeGreaterThan(0);
+
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  await expect(page.locator("#overlay-level")).toBeVisible();
+
+  const ids = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
+  expect(ids).toContain("pyre");
+
+  await page.locator("#choices button", { hasText: "Cinder Pyre" }).click();
+  await page.waitForFunction(() => (
+    window.__game.state === "playing" && window.__game.player.pyre.owned
+  ));
+
+  const weapons = await page.evaluate(() => window.__game.weaponSummary());
+  expect(weapons.pyre.owned).toBe(true);
+  expect(weapons.pyre.charges).toBeGreaterThanOrEqual(1);
+  expect(weapons.pyre.damage).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__game.player.level)).toBe(2);
+  await expect(page.locator("#weapon-pyre")).not.toHaveClass(/locked/);
+  await expect(page.locator("#weapon-pyre")).toHaveText(/Pyre ×1/);
+});
+
+test("mute flips from the bus, the M key, and the sound button", async ({ page }) => {
+  await bootMenu(page);
+
+  expect(await page.evaluate(() => window.__game.audio.muted)).toBe(false);
+  await expect(page.locator("#btn-mute")).toHaveText("Sound on");
+  await expect(page.locator("#btn-mute")).toHaveAttribute("aria-pressed", "false");
+
+  await page.evaluate(() => window.__game.toggleMute());
+  expect(await page.evaluate(() => window.__game.audio.muted)).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem("nightfall-muted"))).toBe("1");
+  await expect(page.locator("#btn-mute")).toHaveText("Muted");
+  await expect(page.locator("#btn-mute")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#btn-mute")).toHaveClass(/is-muted/);
+
+  await page.keyboard.press("m");
+  expect(await page.evaluate(() => window.__game.audio.muted)).toBe(false);
+  expect(await page.evaluate(() => localStorage.getItem("nightfall-muted"))).toBe("0");
+  await expect(page.locator("#btn-mute")).toHaveText("Sound on");
+  await expect(page.locator("#btn-mute")).toHaveAttribute("aria-pressed", "false");
+
+  await page.locator("#btn-mute").click();
+  expect(await page.evaluate(() => window.__game.audio.muted)).toBe(true);
+  await expect(page.locator("#btn-mute")).toHaveText("Muted");
+  await expect(page.locator("#btn-mute")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the warden leaves idle on the 90s kill gate and drops a gem hoard", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  expect(await page.evaluate(() => window.__game.weaponSummary().elite)).toBe("idle");
+
+  await page.evaluate(() => {
+    const game = window.__game;
+    // Keep the night in "playing" while the telegraph runs. These are harness
+    // writes on the live object, same idea as forcing HP for game over.
+    game.player.maxHp = 5000;
+    game.player.hp = 5000;
+    game.player.xpToNext = 1_000_000;
+    game.time = 80;
+    game.kills = 80;
+  });
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+  expect(await page.evaluate(() => window.__game.weaponSummary().elite)).toBe("idle");
+  expect(await page.evaluate(() => window.__game.time)).toBeLessThan(90);
+
+  await page.evaluate(() => {
+    window.__game.time = 90;
+    window.__game.kills = 80;
+  });
+  await page.waitForFunction(() => window.__game.weaponSummary().elite === "warning");
+  await expect(page.locator("#omen")).toBeVisible();
+  await expect(page.locator("#omen")).toHaveText("The Warden rises");
+
+  await page.waitForFunction(() => window.__game.weaponSummary().elite === "alive");
+  const warden = await page.evaluate(() => {
+    const enemy = window.__game.enemies.find((entry) => entry.type === "warden");
+    return enemy ? enemy.hp : 0;
+  });
+  expect(warden).toBeGreaterThan(0);
+
+  const before = await page.evaluate(() => {
+    const game = window.__game;
+    const values = game.gems.map((gem) => gem.value);
+    for (const enemy of game.enemies) {
+      if (enemy.type === "warden") enemy.hp = 0;
+      else enemy.hp = Math.max(enemy.hp, 100000);
+    }
+    // Park the hunter so the hoard is still on the field next frame.
+    game.player.x += 4000;
+    game.player.y += 4000;
+    return values;
+  });
+
+  await page.waitForFunction(() => window.__game.weaponSummary().elite === "fallen");
+  await expect(page.locator("#omen")).toHaveText("The Warden falls");
+
+  const delta = await page.evaluate((previous) => {
+    const tally = (values) => {
+      const counts = new Map();
+      for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+      return counts;
+    };
+    const prior = tally(previous);
+    const now = tally(window.__game.gems.map((gem) => gem.value));
+    const keys = new Set([...prior.keys(), ...now.keys()]);
+    const diff = {};
+    for (const key of keys) {
+      const change = (now.get(key) || 0) - (prior.get(key) || 0);
+      if (change !== 0) diff[key] = change;
+    }
+    return diff;
+  }, before);
+  expect(delta[30]).toBe(1);
+  expect(delta[5]).toBe(6);
+});
+
 async function expectFreshNight(page) {
   const snap = await page.evaluate(() => {
     const game = window.__game;

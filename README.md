@@ -24,7 +24,7 @@ npm start
 
 ## Tests
 
-Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The six specs are the v0.2.0 behaviors; the document title pin matches v0.3.0. How to run it is in [qa/README.md](qa/README.md).
+Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. Six specs cover the v0.2.0 behaviors, and three more cover Cinder Pyre, mute, and the Warden. The document title pin matches v0.3.0. How to run it is in [qa/README.md](qa/README.md).
 
 ```bash
 npm install
