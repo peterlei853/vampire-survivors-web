@@ -10,6 +10,8 @@ const ui = new UI();
 const game = new Game(canvas, input, ui);
 
 // Live handle for QA scripts. Not a save file and not a secret.
+// Useful fields: state, time, kills, player (xp, level, censer), enemies,
+// spawnInterval(), weaponSummary(), night pressure via weaponSummary().threat.
 window.__game = game;
 
 function begin() {

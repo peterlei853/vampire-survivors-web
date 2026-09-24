@@ -1,5 +1,12 @@
-/** World loop: spawn, chase, auto-attack, gems, level-up, camera. */
+/** World loop: spawn, chase, stake, censer, gems, level-up, camera. */
 
+import {
+  CENSER_DAMAGE_STEP,
+  CENSER_MAX_DAMAGE,
+  CENSER_MAX_ORBS,
+  CENSER_MAX_RADIUS,
+  CENSER_RADIUS_STEP,
+} from "./censer.js";
 import { Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
 import { Player } from "./player.js";
@@ -92,16 +99,130 @@ const UPGRADES = [
       player.pierce += 1;
     },
   },
+  {
+    id: "censer",
+    name: "Warding Censer",
+    blurb: "A silver censer wakes and sweeps the dark around you.",
+    family: "censer",
+    available: (player) => !player.censer.owned,
+    weight: () => 5,
+    detail() {
+      return "Unlock an orbiting censer (8 damage)";
+    },
+    apply(player) {
+      player.censer.unlock();
+    },
+  },
+  {
+    id: "censer-orbs",
+    name: "Another Censer",
+    blurb: "Another lamp joins the sweep.",
+    family: "censer",
+    available: (player) => player.censer.owned,
+    maxed: (player) => player.censer.orbs >= CENSER_MAX_ORBS,
+    detail(player) {
+      return `Censers ${player.censer.orbs} → ${player.censer.orbs + 1}`;
+    },
+    apply(player) {
+      player.censer.addOrb();
+    },
+  },
+  {
+    id: "censer-heat",
+    name: "Hot Ash",
+    blurb: "The censers burn hotter as they pass.",
+    family: "censer",
+    available: (player) => player.censer.owned,
+    maxed: (player) => player.censer.damage >= CENSER_MAX_DAMAGE,
+    detail(player) {
+      const next = Math.min(CENSER_MAX_DAMAGE, player.censer.damage + CENSER_DAMAGE_STEP);
+      return `Censer damage ${player.censer.damage} → ${next}`;
+    },
+    apply(player) {
+      player.censer.addDamage();
+    },
+  },
+  {
+    id: "censer-reach",
+    name: "Wider Vigil",
+    blurb: "The sweep reaches farther from your side.",
+    family: "censer",
+    available: (player) => player.censer.owned,
+    maxed: (player) => player.censer.radius >= CENSER_MAX_RADIUS,
+    detail(player) {
+      const next = Math.min(CENSER_MAX_RADIUS, player.censer.radius + CENSER_RADIUS_STEP);
+      return `Sweep reach ${player.censer.radius} → ${next}`;
+    },
+    apply(player) {
+      player.censer.addRadius();
+    },
+  },
 ];
 
 function rollUpgrades(player, count) {
-  const pool = UPGRADES.filter((upgrade) => !upgrade.maxed || !upgrade.maxed(player));
+  const pool = UPGRADES.filter((upgrade) => {
+    if (upgrade.available && !upgrade.available(player)) return false;
+    if (upgrade.maxed && upgrade.maxed(player)) return false;
+    return true;
+  }).map((upgrade) => ({
+    upgrade,
+    weight: upgrade.weight ? upgrade.weight(player) : 1,
+  }));
+
   const picks = [];
   while (picks.length < count && pool.length > 0) {
-    const index = Math.floor(Math.random() * pool.length);
-    picks.push(pool.splice(index, 1)[0]);
+    const total = pool.reduce((sum, entry) => sum + entry.weight, 0);
+    let roll = Math.random() * total;
+    let index = pool.length - 1;
+    for (let i = 0; i < pool.length; i += 1) {
+      roll -= pool[i].weight;
+      if (roll <= 0) {
+        index = i;
+        break;
+      }
+    }
+    picks.push(pool[index].upgrade);
+    pool.splice(index, 1);
+  }
+  // Keep the second weapon visible until the player actually takes it.
+  const censerUnlock = UPGRADES.find((upgrade) => upgrade.id === "censer");
+  if (
+    censerUnlock
+    && (!censerUnlock.available || censerUnlock.available(player))
+    && !picks.some((upgrade) => upgrade.id === "censer")
+  ) {
+    picks.unshift(censerUnlock);
+    if (picks.length > count) picks.pop();
   }
   return picks;
+}
+
+/**
+ * How hard the night is pushing.
+ * Time does most of the work and eases in, so the first seconds stay sparse.
+ * Kills add a smaller nudge (capped) so a strong run sees a thicker night
+ * without an early death spiral.
+ *
+ * Rough shape with a normal kill pace: near 0 through the first half-minute,
+ * still gentle at one minute, then climbing hard by two minutes.
+ */
+export function nightThreat(time, kills) {
+  const minutes = Math.max(0, time) / 60;
+  const fromTime = minutes * 0.28 + Math.max(0, minutes - 0.75) ** 2 * 1.35;
+  const fromKills = Math.min(1.1, Math.max(0, kills) / 220) * 0.35;
+  return fromTime + fromKills;
+}
+
+export function spawnIntervalFor(time, kills) {
+  return Math.max(0.32, 1.7 / (1 + nightThreat(time, kills) * 0.5));
+}
+
+export function spawnCountFor(time, kills) {
+  return Math.min(5, 1 + Math.floor(nightThreat(time, kills) / 1.5));
+}
+
+export function maxEnemiesFor(time, kills) {
+  return Math.min(140, Math.round(12 + nightThreat(time, kills) * 14));
 }
 
 function hash01(ix, iy) {
@@ -193,7 +314,7 @@ export class Game {
     this.kills = 0;
     this.pendingLevels = 0;
     this.currentChoices = [];
-    this.spawnTimer = 0.8;
+    this.spawnTimer = 2.2;
     this.shake = 0;
     this.hurtFlash = 0;
   }
@@ -211,7 +332,7 @@ export class Game {
   start() {
     this.resetWorld();
     this.state = "playing";
-    for (let i = 0; i < 8; i += 1) this.spawnAround("shambler");
+    for (let i = 0; i < 4; i += 1) this.spawnAround("shambler");
     this.ui.setMode("playing");
     this.ui.updateHUD(this);
   }
@@ -245,6 +366,7 @@ export class Game {
     this.separateEnemies();
     this.tryAttack();
     this.updateProjectiles(dt);
+    this.updateCenser(dt);
     this.reapEnemies();
     this.updateGems(dt);
     this.resolveContact();
@@ -254,16 +376,18 @@ export class Game {
   }
 
   spawnInterval() {
-    return Math.max(0.36, 1.2 - this.time * 0.005);
+    return spawnIntervalFor(this.time, this.kills);
   }
 
   maxEnemies() {
-    return Math.min(150, 36 + Math.floor(this.time / 8));
+    return maxEnemiesFor(this.time, this.kills);
   }
 
   pickType() {
-    const bruteChance = Math.min(0.24, Math.max(0, (this.time - 20) / 200));
-    const batChance = Math.min(0.58, 0.18 + this.time / 90);
+    const t = this.time;
+    if (t < 32) return "shambler";
+    const bruteChance = t < 75 ? 0 : Math.min(0.32, (t - 75) / 220);
+    const batChance = Math.min(0.48, (t - 32) / 180);
     const roll = Math.random();
     if (roll < bruteChance) return "brute";
     if (roll < bruteChance + batChance) return "bat";
@@ -271,7 +395,7 @@ export class Game {
   }
 
   spawnBatch() {
-    const count = 1 + Math.floor(this.time / 48);
+    const count = spawnCountFor(this.time, this.kills);
     for (let i = 0; i < count; i += 1) {
       this.makeRoomForSpawn();
       this.spawnAround(this.pickType());
@@ -385,6 +509,41 @@ export class Game {
       if (shot.hitsLeft > 0 && shot.life > 0) kept.push(shot);
     }
     this.projectiles = kept;
+  }
+
+  updateCenser(dt) {
+    const player = this.player;
+    const censer = player.censer;
+    censer.advance(dt);
+    if (!censer.owned) return;
+    const spokes = censer.spokes(player);
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0 || enemy.censerCd > 0) continue;
+      if (!censer.touches(enemy, spokes)) continue;
+      enemy.hp -= censer.damage;
+      enemy.hitFlash = 0.09;
+      enemy.censerCd = censer.hitCooldown;
+      this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(censer.damage), "#d7e8f8"));
+    }
+  }
+
+  weaponSummary() {
+    const censer = this.player.censer;
+    return {
+      stake: {
+        damage: this.player.damage,
+        count: this.player.projectileCount,
+        interval: this.player.attackInterval,
+        pierce: this.player.pierce,
+      },
+      censer: {
+        owned: censer.owned,
+        orbs: censer.orbs,
+        damage: censer.damage,
+        radius: censer.radius,
+      },
+      threat: nightThreat(this.time, this.kills),
+    };
   }
 
   reapEnemies() {
@@ -545,10 +704,12 @@ export class Game {
     this.player.hp = 0;
     this.pendingLevels = 0;
     this.currentChoices = [];
+    const censer = this.player.censer;
     this.ui.showGameOver({
       time: this.time,
       level: this.player.level,
       kills: this.kills,
+      weapons: censer.owned ? `Stake · Censer ×${censer.orbs}` : "Stake",
     });
   }
 
@@ -576,6 +737,7 @@ export class Game {
     actors.push(this.player);
     actors.sort((a, b) => a.y - b.y);
     for (const actor of actors) actor.draw(ctx, this.anim);
+    this.player.censer.draw(ctx, this.player, this.anim);
     for (const shot of this.projectiles) shot.draw(ctx);
     for (const popup of this.floaters) popup.draw(ctx);
     ctx.restore();

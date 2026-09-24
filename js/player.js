@@ -1,8 +1,16 @@
-/** Survivor stats. Weapons fire from Game; this owns movement and XP. */
+/** Survivor stats. Weapons fire from Game; this owns movement, XP, and the censer. */
 
+import { Censer } from "./censer.js";
+
+/**
+ * XP required to leave `level`.
+ * The first step is a short fight (twenty shambler gems, 40 XP).
+ * Later steps bend upward so a few minutes of a denser night still levels you,
+ * without the opening bar filling in the first handful of kills.
+ */
 export function xpRequiredFor(level) {
   const n = Math.max(0, level - 1);
-  return Math.round(10 + n * 6 + n * n * 0.55);
+  return Math.round(40 + n * 18 + n * n * 2.2);
 }
 
 export class Player {
@@ -27,6 +35,7 @@ export class Player {
     this.pickupRadius = 22;
     this.invuln = 0;
     this.aim = 0;
+    this.censer = new Censer();
   }
 
   update(dt, axis) {

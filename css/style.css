@@ -22,7 +22,7 @@ html, body {
   font-family: Georgia, "Iowan Old Style", Palatino, "Palatino Linotype", serif;
 }
 
-button, kbd, .timer, .bar-label, .kills, .level, .version, .choice-detail {
+button, kbd, .timer, .bar-label, .kills, .level, .version, .choice-detail, .weapon {
   font-family: "Segoe UI", system-ui, sans-serif;
 }
 
@@ -74,12 +74,46 @@ canvas {
 
 .level { text-align: right; }
 
+.hud-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 .timer {
   font-size: 32px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
   font-variant-numeric: tabular-nums;
+}
+
+.weapons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.weapon {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid rgba(239, 230, 214, 0.28);
+  background: rgba(8, 6, 10, 0.55);
+  color: var(--ink);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.weapon.locked {
+  opacity: 0.4;
+}
+
+.weapon.censer:not(.locked) {
+  border-color: rgba(190, 214, 232, 0.7);
+  color: #d5e6f4;
 }
 
 .hud-bottom {
@@ -241,6 +275,10 @@ kbd {
 .choice:hover {
   border-color: var(--gold);
   background: #231f2b;
+}
+
+.choice.choice-weapon {
+  border-color: rgba(214, 181, 106, 0.5);
 }
 
 .choice-key {

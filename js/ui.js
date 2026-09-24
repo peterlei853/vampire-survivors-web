@@ -18,6 +18,8 @@ export class UI {
     this.levelText = document.getElementById("level");
     this.killsText = document.getElementById("kills");
     this.timerText = document.getElementById("timer");
+    this.weaponStake = document.getElementById("weapon-stake");
+    this.weaponCenser = document.getElementById("weapon-censer");
     this.startOverlay = document.getElementById("overlay-start");
     this.levelOverlay = document.getElementById("overlay-level");
     this.overOverlay = document.getElementById("overlay-over");
@@ -44,6 +46,14 @@ export class UI {
     this.levelText.textContent = String(player.level);
     this.killsText.textContent = String(game.kills);
     this.timerText.textContent = formatTime(game.time);
+    this.weaponStake.textContent = `Stake ×${player.projectileCount}`;
+    if (player.censer.owned) {
+      this.weaponCenser.textContent = `Censer ×${player.censer.orbs}`;
+      this.weaponCenser.classList.remove("locked");
+    } else {
+      this.weaponCenser.textContent = "Censer";
+      this.weaponCenser.classList.add("locked");
+    }
   }
 
   showLevelUp(player, choices, onPick) {
@@ -51,7 +61,7 @@ export class UI {
     choices.forEach((upgrade, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "choice";
+      button.className = upgrade.family === "censer" ? "choice choice-weapon" : "choice";
       const key = document.createElement("span");
       key.className = "choice-key";
       key.textContent = String(index + 1);
@@ -78,6 +88,7 @@ export class UI {
       ["Level", String(stats.level)],
       ["Kills", String(stats.kills)],
     ];
+    if (stats.weapons) rows.push(["Weapons", stats.weapons]);
     for (const [label, value] of rows) {
       const term = document.createElement("dt");
       term.textContent = label;

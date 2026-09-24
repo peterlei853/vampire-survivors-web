@@ -1,6 +1,6 @@
 # vampire-survivors-web
 
-Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.1.0 is a playable core loop: move, auto-attack, collect gems, level up, and survive until you fall.
+Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.2.0 is a playable night: move, auto-attack with a stake and an unlockable censer, collect gems, level up, and survive a spawn curve that starts sparse and thickens.
 
 This is an original prototype. It is not affiliated with poncle or Vampire Survivors.
 
@@ -26,27 +26,28 @@ npm start
 
 1. Choose **Begin the night** (or press Enter).
 2. Move with **WASD** or the **arrow keys**. The stake aims and fires on its own at the nearest foe.
-3. Enemies walk in from off-screen and chase you. Contact hurts. You get a short invulnerability blink after each hit.
+3. Enemies walk in from off-screen and chase you. The first half-minute is shamblers only. Bats arrive after about 30 seconds, brutes after about 75. Contact hurts. You get a short invulnerability blink after each hit.
 4. Fallen enemies drop gems. Nearby gems pull in immediately. Gems left behind start homing after a short delay so a long kite still pays off. Picking them up grants XP.
-5. Filling the XP bar levels you up and pauses the night. Pick one of three boons (click, or press **1**, **2**, or **3**). A level also restores a little health.
-6. Spawn rate, enemy mix, and enemy strength rise as the timer climbs. At 0 HP the run ends. **Rise again**, **Enter**, or **R** starts a new night.
+5. Filling the XP bar levels you up and pauses the night. Pick one of three boons (click, or press **1**, **2**, or **3**). A level also restores a little health. **Warding Censer** is one of the three choices on every level-up until you take it. Later boons add censers, heat, or reach. Stake boons still sharpen the bolts.
+6. Spawn rate, batch size, and the crowd cap rise with time, plus a smaller share of your kills. At 0 HP the run ends. **Rise again**, **Enter**, or **R** starts a new night.
 
-HUD, from the top: kills, survival timer, level. Along the bottom: HP, then XP.
+HUD, from the top: kills and version, survival timer with weapon chips, level. Along the bottom: HP, then XP. The censer chip stays dim until you wake one.
 
 ## Layout
 
 - `index.html` — shell, HUD, level-up, and game-over UI
 - `css/style.css` — layout and theme
 - `js/main.js` — boot and overlay shortcuts
-- `js/game.js` — loop, spawning, combat, camera, upgrade choices
+- `js/game.js` — loop, spawn curve, combat, camera, upgrade choices
 - `js/player.js` — movement, stats, XP curve
+- `js/censer.js` — orbiting warding censer
 - `js/enemy.js` — shamblers, bats, and brutes
 - `js/projectile.js` — auto-aimed stakes
 - `js/gem.js` — XP pickups and magnet pull
 - `js/ui.js` — HUD and overlays
 - `js/input.js` — WASD / arrow state
 
-Tune feel in `js/player.js` (speed, damage, fire rate), `js/enemy.js` (type stats), and the spawn helpers in `js/game.js`.
+Tune feel in `js/player.js` (XP curve, stake stats), `js/censer.js` (sweep damage and reach), `js/enemy.js` (type stats), and `nightThreat` / the spawn helpers in `js/game.js`.
 
 ## Branch workflow
 
@@ -58,21 +59,19 @@ Tune feel in `js/player.js` (speed, damage, fire rate), `js/enemy.js` (type stat
 
 Engineers work on `feature/core-gameplay` and open a pull request. QA works on `qa/test-scripts`. **`main` is merged only by the Manager, and only when the build scores at least 4/5.**
 
-## v0.1.0 notes for Engineer and QA
+## v0.2.0 notes for Engineer and QA
 
 In this build:
 
-- One auto-aimed stake weapon, with level-up boons for damage, fire rate, extra bolts, pierce, move speed, magnet radius, and max HP
-- Three chasing enemy types and a timer that speeds up spawns
-- Gems, an XP curve, a pausing upgrade pick, HUD, game over, and restart
-- `window.__game` is a live handle (`state`, `player`, `enemies`, `gems`, `kills`, `time`) for manual checks. It is not persisted and holds no secrets
+- Two auto weapons. The stake is owned from the start. The **Warding Censer** is unlocked and upgraded from level-up boons. Its spokes sweep a circle and burn enemies they pass, including ones in melee.
+- XP to leave level 1 is 40 (twenty shambler gems). The cost then bends upward (`40 + 18n + 2.2n²`, `n` = level − 1) so the first level is a short fight and a few minutes of play still reaches the mid levels.
+- Spawn pressure eases in. Opening cap is about a dozen, interval about 1.7s, one enemy per wave, shamblers only, four already on the walk in. The first minute stays in that band. By two minutes the interval, batch size, and cap have climbed, and after that the field fills toward a cap of 140. Kills contribute, but that term is capped so a fast start cannot flood the opening.
+- `window.__game` is a live handle for manual checks. It is not persisted and holds no secrets. Besides `state`, `player`, `enemies`, `gems`, `kills`, and `time`, `weaponSummary()` returns stake stats, censer stats, and the current threat value. `player.censer` is the weapon itself (`owned`, `orbs`, `damage`, `radius`).
 
 Not in this build yet:
 
-- Extra weapons, chests, evolutions, bosses, obstacles, or biomes
+- Chests, evolutions, bosses, obstacles, or biomes
 - Audio, touch controls, or gamepad
 - Meta progression, accounts, or save data
 - An automated suite on this branch (`qa/test-scripts` is the QA home for that)
 - Sprite art; characters and effects are drawn on the canvas
-
-Balance is a first pass so the first level arrives after a handful of kills and standing still eventually loses.
