@@ -21,6 +21,8 @@ export class UI {
     this.weaponStake = document.getElementById("weapon-stake");
     this.weaponCenser = document.getElementById("weapon-censer");
     this.weaponPyre = document.getElementById("weapon-pyre");
+    this.weaponCross = document.getElementById("weapon-cross");
+    this.magnetReadout = document.getElementById("magnet");
     this.omen = document.getElementById("omen");
     this.muteButton = document.getElementById("btn-mute");
     this.startOverlay = document.getElementById("overlay-start");
@@ -64,6 +66,19 @@ export class UI {
       this.weaponPyre.textContent = "Pyre";
       this.weaponPyre.classList.add("locked");
     }
+    if (this.weaponCross) {
+      if (player.cross.owned) {
+        this.weaponCross.textContent = `Cross ×${player.cross.count}`;
+        this.weaponCross.classList.remove("locked");
+      } else {
+        this.weaponCross.textContent = "Cross";
+        this.weaponCross.classList.add("locked");
+      }
+    }
+    if (this.magnetReadout) {
+      this.magnetReadout.textContent = `Magnet ${player.magnetRadius}`;
+      this.magnetReadout.classList.toggle("armed", player.magnetStacks > 0);
+    }
     this.setOmen(game.omen);
   }
 
@@ -94,6 +109,8 @@ export class UI {
       let tone = "choice";
       if (upgrade.family === "censer") tone = "choice choice-weapon";
       else if (upgrade.family === "pyre") tone = "choice choice-pyre";
+      else if (upgrade.family === "cross") tone = "choice choice-cross";
+      else if (upgrade.family === "magnet") tone = "choice choice-magnet";
       button.className = tone;
       const key = document.createElement("span");
       key.className = "choice-key";

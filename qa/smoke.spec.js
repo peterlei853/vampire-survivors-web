@@ -30,7 +30,7 @@ async function beginNight(page) {
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.3\.0/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.4\.0/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -38,6 +38,10 @@ test("loads the menu with no console errors", async ({ page }) => {
   expect(summary.stake.count).toBe(1);
   expect(summary.stake.damage).toBeGreaterThan(0);
   expect(summary.censer.owned).toBe(false);
+  expect(summary.cross.owned).toBe(false);
+  expect(summary.magnet.radius).toBe(175);
+  expect(summary.magnet.pickupRadius).toBe(22);
+  expect(summary.magnet.stacks).toBe(0);
   expect(summary.threat).toBe(0);
 });
 
@@ -294,6 +298,138 @@ test("the warden leaves idle on the 90s kill gate and drops a gem hoard", async 
   expect(delta[5]).toBe(6);
 });
 
+test("a forced level-up offers Ash Cross and taking it arms the weapon", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await expect(page.locator("#weapon-cross")).toHaveClass(/locked/);
+  await expect(page.locator("#weapon-cross")).toHaveText("Cross");
+
+  const queued = await page.evaluate(() => {
+    const game = window.__game;
+    const gained = game.player.gainXp(game.player.xpToNext);
+    game.pendingLevels += gained.length;
+    return { gained, pending: game.pendingLevels };
+  });
+  expect(queued.gained).toEqual([2]);
+  expect(queued.pending).toBeGreaterThan(0);
+
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  await expect(page.locator("#overlay-level")).toBeVisible();
+
+  const ids = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
+  expect(ids).toContain("cross");
+
+  await page.locator("#choices button", { hasText: "Ash Cross" }).click();
+  await page.waitForFunction(() => (
+    window.__game.state === "playing" && window.__game.player.cross.owned
+  ));
+
+  const weapons = await page.evaluate(() => window.__game.weaponSummary());
+  expect(weapons.cross.owned).toBe(true);
+  expect(weapons.cross.count).toBeGreaterThanOrEqual(1);
+  expect(weapons.cross.damage).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__game.player.level)).toBe(2);
+  await expect(page.locator("#weapon-cross")).not.toHaveClass(/locked/);
+  await expect(page.locator("#weapon-cross")).toHaveText(/Cross ×1/);
+
+  await page.waitForFunction(() => window.__game.crosses.length > 0);
+});
+
+test("Grave Magnet stacks the pull radius and the HUD follows", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await expect(page.locator("#magnet")).toHaveText("Magnet 175");
+  await expect(page.locator("#magnet")).not.toHaveClass(/armed/);
+
+  const steps = await page.evaluate(() => {
+    const game = window.__game;
+    const radii = [game.weaponSummary().magnet.radius];
+    while (game.applyUpgrade("magnet")) radii.push(game.weaponSummary().magnet.radius);
+    return {
+      radii,
+      stacks: game.weaponSummary().magnet.stacks,
+      pickup: game.weaponSummary().magnet.pickupRadius,
+      refused: game.applyUpgrade("magnet"),
+    };
+  });
+  expect(steps.radii).toEqual([175, 223, 271, 319, 320]);
+  expect(steps.stacks).toBe(4);
+  expect(steps.pickup).toBe(22);
+  expect(steps.refused).toBe(false);
+
+  await expect(page.locator("#magnet")).toHaveText("Magnet 320");
+  await expect(page.locator("#magnet")).toHaveClass(/armed/);
+});
+
+test("the touch stick stays hidden for a mouse until a touch drags it", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await expect(page.locator("#stick")).toHaveClass(/hidden/);
+
+  const idle = await page.evaluate(() => ({ ...window.__game.input.touch }));
+  expect(idle.visible).toBe(false);
+  expect(idle.coarse).toBe(false);
+  expect(idle.active).toBe(false);
+  expect(idle.x).toBe(0);
+  expect(idle.y).toBe(0);
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 3,
+      pointerType: "mouse",
+      clientX: 90,
+      clientY: 420,
+      isPrimary: true,
+    }));
+  });
+  expect(await page.evaluate(() => window.__game.input.touch.active)).toBe(false);
+
+  await page.evaluate(() => {
+    const common = {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 7,
+      pointerType: "touch",
+      isPrimary: true,
+    };
+    window.dispatchEvent(new PointerEvent("pointerdown", { ...common, clientX: 90, clientY: 400 }));
+    window.dispatchEvent(new PointerEvent("pointermove", { ...common, clientX: 150, clientY: 400 }));
+  });
+
+  const dragged = await page.evaluate(() => ({ ...window.__game.input.touch }));
+  expect(dragged.active).toBe(true);
+  expect(dragged.visible).toBe(true);
+  expect(dragged.x).toBeGreaterThan(0.45);
+  expect(Math.abs(dragged.y)).toBeLessThan(0.2);
+  await expect(page.locator("#stick")).not.toHaveClass(/hidden/);
+
+  await page.keyboard.down("w");
+  const axis = await page.evaluate(() => window.__game.input.axis());
+  expect(axis.y).toBeLessThan(-0.5);
+  expect(Math.abs(axis.x)).toBeLessThan(0.2);
+  await page.keyboard.up("w");
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent("pointerup", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 7,
+      pointerType: "touch",
+      clientX: 150,
+      clientY: 400,
+      isPrimary: true,
+    }));
+  });
+  const released = await page.evaluate(() => ({ ...window.__game.input.touch }));
+  expect(released.active).toBe(false);
+  expect(released.visible).toBe(false);
+  expect(released.x).toBe(0);
+  expect(released.y).toBe(0);
+  await expect(page.locator("#stick")).toHaveClass(/hidden/);
+});
+
 async function expectFreshNight(page) {
   const snap = await page.evaluate(() => {
     const game = window.__game;
@@ -304,6 +440,10 @@ async function expectFreshNight(page) {
       kills: game.kills,
       time: game.time,
       owned: game.weaponSummary().censer.owned,
+      pyre: game.weaponSummary().pyre.owned,
+      cross: game.weaponSummary().cross.owned,
+      magnet: game.weaponSummary().magnet.radius,
+      stacks: game.weaponSummary().magnet.stacks,
       stake: game.weaponSummary().stake.count,
     };
   });
@@ -313,5 +453,9 @@ async function expectFreshNight(page) {
   expect(snap.kills).toBe(0);
   expect(snap.time).toBeLessThan(1);
   expect(snap.owned).toBe(false);
+  expect(snap.pyre).toBe(false);
+  expect(snap.cross).toBe(false);
+  expect(snap.magnet).toBe(175);
+  expect(snap.stacks).toBe(0);
   expect(snap.stake).toBe(1);
 }

@@ -1,4 +1,4 @@
-/** World loop: spawn, chase, stake, censer, pyre, warden, gems, level-up, camera. */
+/** World loop: spawn, chase, stake, censer, pyre, cross, warden, gems, level-up, camera. */
 
 import { AudioBus } from "./audio.js";
 import {
@@ -8,9 +8,17 @@ import {
   CENSER_MAX_RADIUS,
   CENSER_RADIUS_STEP,
 } from "./censer.js";
+import {
+  CROSS_DAMAGE_STEP,
+  CROSS_MAX_COUNT,
+  CROSS_MAX_DAMAGE,
+  CROSS_MAX_RANGE,
+  CROSS_RANGE_STEP,
+  AshBolt,
+} from "./cross.js";
 import { Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
-import { Player } from "./player.js";
+import { MAGNET_MAX, MAGNET_STEP, Player } from "./player.js";
 import { Projectile } from "./projectile.js";
 import {
   PYRE_DAMAGE_STEP,
@@ -101,13 +109,15 @@ const UPGRADES = [
     id: "magnet",
     name: "Grave Magnet",
     blurb: "Gems rush in from farther away.",
-    maxed: (player) => player.magnetRadius >= 320,
+    family: "magnet",
+    maxed: (player) => player.magnetRadius >= MAGNET_MAX,
     detail(player) {
-      const next = Math.min(320, player.magnetRadius + 48);
+      const next = Math.min(MAGNET_MAX, player.magnetRadius + MAGNET_STEP);
       return `Pull radius ${player.magnetRadius} → ${next}`;
     },
     apply(player) {
-      player.magnetRadius = Math.min(320, player.magnetRadius + 48);
+      player.magnetRadius = Math.min(MAGNET_MAX, player.magnetRadius + MAGNET_STEP);
+      player.magnetStacks += 1;
     },
   },
   {
@@ -238,6 +248,64 @@ const UPGRADES = [
       player.pyre.addRadius();
     },
   },
+  {
+    id: "cross",
+    name: "Ash Cross",
+    blurb: "A cross flies out and cuts again on the way home.",
+    family: "cross",
+    available: (player) => !player.cross.owned,
+    weight: () => 5,
+    detail() {
+      return "Unlock a returning cross (10 damage)";
+    },
+    apply(player) {
+      player.cross.unlock();
+    },
+  },
+  {
+    id: "cross-count",
+    name: "Another Cross",
+    blurb: "Another cross leaves with the first.",
+    family: "cross",
+    available: (player) => player.cross.owned,
+    maxed: (player) => player.cross.count >= CROSS_MAX_COUNT,
+    detail(player) {
+      return `Crosses ${player.cross.count} → ${player.cross.count + 1}`;
+    },
+    apply(player) {
+      player.cross.addCount();
+    },
+  },
+  {
+    id: "cross-heat",
+    name: "Heavier Ash",
+    blurb: "The cross bites deeper on both passes.",
+    family: "cross",
+    available: (player) => player.cross.owned,
+    maxed: (player) => player.cross.damage >= CROSS_MAX_DAMAGE,
+    detail(player) {
+      const next = Math.min(CROSS_MAX_DAMAGE, player.cross.damage + CROSS_DAMAGE_STEP);
+      return `Cross damage ${player.cross.damage} → ${next}`;
+    },
+    apply(player) {
+      player.cross.addDamage();
+    },
+  },
+  {
+    id: "cross-reach",
+    name: "Longer Flight",
+    blurb: "The cross travels farther before it turns back.",
+    family: "cross",
+    available: (player) => player.cross.owned,
+    maxed: (player) => player.cross.range >= CROSS_MAX_RANGE,
+    detail(player) {
+      const next = Math.min(CROSS_MAX_RANGE, player.cross.range + CROSS_RANGE_STEP);
+      return `Flight ${player.cross.range} → ${next}`;
+    },
+    apply(player) {
+      player.cross.addRange();
+    },
+  },
 ];
 
 function rollUpgrades(player, count) {
@@ -266,8 +334,8 @@ function rollUpgrades(player, count) {
     pool.splice(index, 1);
   }
   // Keep each locked weapon on the table until the player actually takes it.
-  // Unshift pyre first, then the censer, so the censer stays in front.
-  const pinned = ["pyre", "censer"];
+  // Unshift cross, then pyre, then the censer, so the censer stays in front.
+  const pinned = ["cross", "pyre", "censer"];
   for (const id of pinned) {
     const unlock = UPGRADES.find((upgrade) => upgrade.id === id);
     if (!unlock) continue;
@@ -406,6 +474,7 @@ export class Game {
     this.player = new Player(0, 0);
     this.enemies = [];
     this.projectiles = [];
+    this.crosses = [];
     this.flasks = [];
     this.pools = [];
     this.gems = [];
@@ -457,6 +526,7 @@ export class Game {
     if (document.hidden) dt = 0;
     this.lastDt = dt;
     this.anim += dt;
+    this.input.setStickContext(this.state === "playing");
     if (this.state === "playing") this.update(dt);
     this.draw();
     if (this.state === "playing" || this.state === "levelup") this.ui.updateHUD(this);
@@ -481,6 +551,7 @@ export class Game {
     this.updateProjectiles(dt);
     this.updateCenser(dt);
     this.updatePyre(dt);
+    this.updateCross(dt);
     this.resolvePulses();
     this.reapEnemies();
     this.updateGems(dt);
@@ -699,6 +770,51 @@ export class Game {
     if (this.pools.length > 24) this.pools.splice(0, this.pools.length - 24);
   }
 
+  updateCross(dt) {
+    const cross = this.player.cross;
+    if (cross.owned && cross.timer > 0) cross.timer = Math.max(0, cross.timer - dt);
+    if (cross.owned && cross.timer <= 0) {
+      cross.timer = cross.interval;
+      const living = this.enemies.filter((enemy) => enemy.hp > 0);
+      let base = this.player.aim;
+      if (living.length > 0) {
+        const target = nearest(this.player, living, 1)[0];
+        base = Math.atan2(target.y - this.player.y, target.x - this.player.x);
+      }
+      const count = cross.count;
+      const mid = (count - 1) / 2;
+      for (let i = 0; i < count; i += 1) {
+        const angle = base + (i - mid) * 0.5;
+        this.crosses.push(new AshBolt(
+          this.player.x + Math.cos(angle) * (this.player.radius + 8),
+          this.player.y + Math.sin(angle) * (this.player.radius + 8),
+          angle,
+          cross.damage,
+          cross.speed,
+          cross.range,
+        ));
+      }
+    }
+
+    const kept = [];
+    for (const bolt of this.crosses) {
+      if (!bolt.update(dt, this.player)) continue;
+      for (const enemy of this.enemies) {
+        if (enemy.hp <= 0 || !bolt.ready(enemy)) continue;
+        const dist = Math.hypot(bolt.x - enemy.x, bolt.y - enemy.y);
+        if (dist > bolt.radius + enemy.radius) continue;
+        enemy.hp -= bolt.damage;
+        enemy.hitFlash = 0.09;
+        bolt.mark(enemy);
+        this.audio.play("hit");
+        this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(bolt.damage), "#f0e2cc"));
+      }
+      kept.push(bolt);
+    }
+    this.crosses = kept;
+    if (this.crosses.length > 16) this.crosses.splice(0, this.crosses.length - 16);
+  }
+
   maybeElite() {
     if (this.eliteState !== "idle") return;
     if (!eliteDue(this.time, this.kills)) return;
@@ -763,6 +879,7 @@ export class Game {
   weaponSummary() {
     const censer = this.player.censer;
     const pyre = this.player.pyre;
+    const cross = this.player.cross;
     return {
       stake: {
         damage: this.player.damage,
@@ -783,9 +900,31 @@ export class Game {
         radius: pyre.radius,
         interval: pyre.interval,
       },
+      cross: {
+        owned: cross.owned,
+        count: cross.count,
+        damage: cross.damage,
+        range: cross.range,
+        interval: cross.interval,
+      },
+      magnet: {
+        radius: this.player.magnetRadius,
+        pickupRadius: this.player.pickupRadius,
+        stacks: this.player.magnetStacks,
+      },
       elite: this.eliteState,
       threat: nightThreat(this.time, this.kills),
     };
+  }
+
+  /** Apply one boon by id. Level-up cards use the same objects. */
+  applyUpgrade(id) {
+    const upgrade = UPGRADES.find((entry) => entry.id === id);
+    if (!upgrade) return false;
+    if (upgrade.available && !upgrade.available(this.player)) return false;
+    if (upgrade.maxed && upgrade.maxed(this.player)) return false;
+    upgrade.apply(this.player);
+    return true;
   }
 
   reapEnemies() {
@@ -968,9 +1107,11 @@ export class Game {
     this.audio.play("death");
     const censer = this.player.censer;
     const pyre = this.player.pyre;
+    const cross = this.player.cross;
     const weapons = ["Stake"];
     if (censer.owned) weapons.push(`Censer ×${censer.orbs}`);
     if (pyre.owned) weapons.push(`Pyre ×${pyre.charges}`);
+    if (cross.owned) weapons.push(`Cross ×${cross.count}`);
     this.ui.showGameOver({
       time: this.time,
       level: this.player.level,
@@ -1000,6 +1141,7 @@ export class Game {
     for (const pool of this.pools) pool.draw(ctx, this.anim);
     this.drawEliteWarning(ctx);
     this.drawWardenMarks(ctx);
+    this.drawMagnetReach(ctx);
     for (const gem of this.gems) gem.draw(ctx);
     for (const spark of this.particles) spark.draw(ctx);
     const actors = this.enemies.slice();
@@ -1009,9 +1151,23 @@ export class Game {
     this.player.censer.draw(ctx, this.player, this.anim);
     for (const flask of this.flasks) flask.draw(ctx);
     for (const shot of this.projectiles) shot.draw(ctx);
+    for (const bolt of this.crosses) bolt.draw(ctx);
     for (const popup of this.floaters) popup.draw(ctx);
     ctx.restore();
     this.drawVignette(ctx, w, h);
+  }
+
+  drawMagnetReach(ctx) {
+    const player = this.player;
+    if (player.magnetStacks <= 0) return;
+    ctx.save();
+    ctx.strokeStyle = "rgba(125, 206, 176, 0.38)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 8]);
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.magnetRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawBackground(ctx, w, h, shakeX, shakeY) {

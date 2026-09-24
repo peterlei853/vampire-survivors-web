@@ -10,8 +10,10 @@ const ui = new UI();
 const game = new Game(canvas, input, ui);
 
 // Live handle for QA scripts. Not a save file and not a secret.
-// Useful fields: state, time, kills, player (xp, level, censer, pyre), enemies,
-// eliteState, spawnInterval(), weaponSummary() (stake, censer, pyre, elite, threat).
+// Useful fields: state, time, kills, player (xp, level, censer, pyre, cross), enemies,
+// eliteState, spawnInterval(), input.touch (stick visible / vector),
+// weaponSummary() (stake, censer, pyre, cross, magnet, elite, threat),
+// applyUpgrade(id), toggleMute().
 window.__game = game;
 ui.setMuted(game.audio.muted);
 
