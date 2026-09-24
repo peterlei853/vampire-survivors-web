@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Nightfall — v0.3.0</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Nightfall — v0.4.0</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%239e2d3a'/%3E%3Cpath d='M8 1.5l1.1 3.4H13l-2.8 2 1.1 3.4L8 8.4 4.7 10.3 5.8 6.9 3 4.9h3.9z' fill='%23efe6d6'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -14,7 +14,7 @@
 
     <div id="hud" class="hidden">
       <div class="hud-top">
-        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.3.0</span></div>
+        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.4.0</span></div>
         <div class="hud-clock">
           <div id="timer" class="timer">00:00</div>
           <div id="omen" class="omen hidden" role="status"></div>
@@ -22,6 +22,8 @@
             <span id="weapon-stake" class="weapon stake">Stake ×1</span>
             <span id="weapon-censer" class="weapon censer locked">Censer</span>
             <span id="weapon-pyre" class="weapon pyre locked">Pyre</span>
+            <span id="weapon-cross" class="weapon cross locked">Cross</span>
+            <span id="magnet" class="weapon magnet">Magnet 175</span>
           </div>
         </div>
         <div class="level">Lv <span id="level">1</span></div>
@@ -40,13 +42,13 @@
 
     <div id="overlay-start" class="overlay">
       <div class="panel">
-        <p class="eyebrow">Survivors prototype · v0.3.0</p>
+        <p class="eyebrow">Survivors prototype · v0.4.0</p>
         <h1>Nightfall</h1>
-        <p class="lede">Move through the dark. The stake aims itself. Level up to wake a censer or a pyre. Around the second minute, a warden marks the ground before it strikes. Gather the gems, and don’t let the horde close.</p>
+        <p class="lede">Move through the dark. The stake aims itself. Level up to wake a censer, a pyre, or an ash cross, and to pull gems from farther away. Around the second minute, a warden marks the ground before it strikes.</p>
         <button id="btn-start" type="button">Begin the night</button>
         <ul class="help">
-          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows move</li>
-          <li>The stake fires on its own. A censer or a pyre can join it from a boon</li>
+          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows move. On a phone, drag the stick</li>
+          <li>The stake fires on its own. A censer, a pyre, or an ash cross can join it</li>
           <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick a level-up</li>
           <li><kbd>M</kbd> mutes the night</li>
           <li><kbd>Enter</kbd> starts, and restarts after you fall</li>
@@ -70,6 +72,11 @@
         <button id="btn-restart" type="button">Rise again</button>
         <p class="hint"><kbd>Enter</kbd> or <kbd>R</kbd></p>
       </div>
+    </div>
+
+    <div id="stick" class="stick hidden" aria-hidden="true">
+      <div class="stick-base"></div>
+      <div id="stick-knob" class="stick-knob"></div>
     </div>
   </div>
   <script type="module" src="js/main.js"></script>

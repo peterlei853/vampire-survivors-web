@@ -1,13 +1,15 @@
 # Nightfall smoke suite
 
-Automated smoke checks for the v0.3.0 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.3.0). Three more cover Cinder Pyre, mute, and the Warden. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
+Automated smoke checks for the v0.4.0 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.4.0). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
 
 Assertions go through the live handle in `js/main.js`:
 
-- `window.__game.state`, `player` (including `censer` and `pyre`), `enemies`, `projectiles`, `gems`, `input`, `kills`, `time`
-- `window.__game.weaponSummary()` for stake stats, censer stats, pyre stats (`owned`, `charges`, `damage`, `radius`, `interval`), `elite` (`idle`, `warning`, `alive`, `fallen`), and night threat
+- `window.__game.state`, `player` (including `censer`, `pyre`, and `cross`), `enemies`, `projectiles`, `crosses`, `gems`, `input`, `kills`, `time`
+- `window.__game.weaponSummary()` for stake stats, censer stats, pyre stats (`owned`, `charges`, `damage`, `radius`, `interval`), cross stats (`owned`, `count`, `damage`, `range`, `interval`), magnet (`radius`, `pickupRadius`, `stacks`), `elite` (`idle`, `warning`, `alive`, `fallen`), and night threat
+- `window.__game.input.touch` for the stick (`active`, `visible`, `coarse`, `x`, `y`)
 - `window.__game.spawnInterval()` for the opening spawn gap
 - `window.__game.toggleMute()` and `audio.muted` for the sound bus
+- `window.__game.applyUpgrade(id)` to take a catalog boon without waiting on the roll
 - `window.__game.currentChoices` while the boon overlay is open
 
 No gameplay numbers are changed in source. Level-up is forced by granting the XP still needed to leave level 1 and queueing `pendingLevels`, which the next frame turns into the normal boon overlay. Game over is forced by setting `player.hp` to 0. The Warden spec writes `time` and `kills` on the live object so the 90s / 80-kill gate opens on the next frame. It also raises HP and the XP target, and later parks the hunter away from the drop, so a death, a level-up pause, or gem pickup cannot cut the telegraph short. Those writes stay in the spec.
@@ -25,6 +27,9 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | forced level-up offers Cinder Pyre | The boon overlay includes Pyre; choosing it sets `weaponSummary().pyre.owned` and the HUD chip to `Pyre ×1` |
 | mute flips | `toggleMute()`, **M**, and **Sound on** / **Muted** each flip `audio.muted`, the button label, and `aria-pressed` |
 | the warden leaves idle | Below 90s the elite stays `idle` even at 80 kills; at 90s / 80 kills it reaches `warning` then `alive`. Felling the warden sets `fallen` and leaves one 30 XP gem plus six 5 XP gems |
+| forced level-up offers Ash Cross | The boon overlay includes Ash Cross; choosing it sets `weaponSummary().cross.owned` and the HUD chip to `Cross ×1`, then a bolt appears |
+| Grave Magnet stacks | `applyUpgrade("magnet")` walks 175 → 223 → 271 → 319 → 320, the HUD reads `Magnet 320`, and a fifth call is refused. Pickup radius stays 22 |
+| touch stick | On desktop the stick stays hidden. A mouse pointer does nothing. A touch drag sets `input.touch` and shows `#stick`. Holding **W** replaces that vector |
 
 ## Run
 

@@ -1,7 +1,13 @@
 /** Survivor stats. Weapons fire from Game; this owns movement, XP, and weapons. */
 
+import { AshCross } from "./cross.js";
 import { Censer } from "./censer.js";
 import { Pyre } from "./pyre.js";
+
+/** Baseline gem pull. Grave Magnet adds MAGNET_STEP up to MAGNET_MAX. */
+export const MAGNET_BASE = 175;
+export const MAGNET_STEP = 48;
+export const MAGNET_MAX = 320;
 
 /**
  * XP required to leave `level`.
@@ -32,12 +38,14 @@ export class Player {
     this.projectileLife = 1.05;
     this.projectileCount = 1;
     this.pierce = 0;
-    this.magnetRadius = 175;
+    this.magnetRadius = MAGNET_BASE;
+    this.magnetStacks = 0;
     this.pickupRadius = 22;
     this.invuln = 0;
     this.aim = 0;
     this.censer = new Censer();
     this.pyre = new Pyre();
+    this.cross = new AshCross();
   }
 
   update(dt, axis) {
