@@ -26,6 +26,7 @@ export class Enemy {
     this.xp = base.xp;
     this.color = base.color;
     this.hitFlash = 0;
+    this.censerCd = 0;
     this.bob = Math.random() * Math.PI * 2;
   }
 
@@ -41,6 +42,7 @@ export class Enemy {
       this.y += (dx / dist) * Math.sin(this.bob) * 36 * dt;
     }
     if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
+    if (this.censerCd > 0) this.censerCd = Math.max(0, this.censerCd - dt);
   }
 
   draw(ctx, time) {
