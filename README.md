@@ -22,6 +22,34 @@ The same server is wired as an npm script (no install):
 npm start
 ```
 
+## Godot
+
+A native port of the same night is in [`godot/`](godot/). It is GDScript only (no C#, no addons) and uses the **Compatibility** renderer so it can run on a laptop with integrated graphics. Open it in **Godot 4.3 or newer**. This port was checked with Godot 4.7.2. The web files are unchanged.
+
+On Windows: install Godot 4 from [godotengine.org](https://godotengine.org/download), choose **Import** (or Open), and select `godot/project.godot`. Press **F5** to play. Click the game view if the keys do not respond. The Compatibility renderer is already set in the project.
+
+From a machine with a Godot 4 binary on `PATH`:
+
+```bash
+godot --path godot
+```
+
+Headless check, from the repo root:
+
+```bash
+godot --headless --path godot --import
+godot --headless --path godot --quit-after 30
+godot --headless --path godot -s res://scripts/smoke_runner.gd
+```
+
+The smoke script loads the main scene, moves the hunter, confirms the opening enemies, lets the stake get a kill, and collects gems until the first level-up. It also checks that Warding Censer, Cinder Pyre, and Ash Cross stay on the table until taken, and that the warden telegraph can spawn.
+
+Controls match the browser build: **WASD** or arrows, a virtual stick on touch screens (hidden for a mouse until a finger is down), **1 / 2 / 3** to pick a boon, **Enter** to begin and to rise again, **M** to mute. Mute is remembered in `user://nightfall.cfg` (Godot's equivalent of the browser `nightfall-muted` flag).
+
+The title reads **吸血鬼獵人 / Nightfall**. Chinese glyphs come from a SIL Open Font License subset of Noto Sans TC in `godot/assets/fonts/`. If that file cannot be loaded, or the font has no CJK glyphs, the title falls back to **Vampire Hunter** and the engine may still use a system font for missing characters.
+
+Not in this port: the browser hook `window.__game`, pausing when a browser tab is hidden (the native window keeps running, and a frame is still capped at 0.05s), gamepad, and the same later features the web build does not have yet (chests, evolutions, obstacles, biomes, meta progression). Characters and cues are still drawn and synthesized in code.
+
 ## Tests
 
 Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.4.0. How to run it is in [qa/README.md](qa/README.md).
