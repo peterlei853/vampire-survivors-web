@@ -1167,6 +1167,9 @@ test("a 10:00 crowd at the 220 cap stays above 20 fps", async ({ page }) => {
     game.player.maxHp = 100000;
     game.player.invuln = 999;
     game.spawnTimer = 999;
+    game.swarmsSeen.add("bats");
+    game.swarmsSeen.add("brutes");
+    game.swarmsSeen.add("mixed");
     game.time = 590;
     game.wardenAppearances = 4;
     const target = 220;
