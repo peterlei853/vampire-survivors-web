@@ -87,17 +87,17 @@ HUD, from the top: kills and version, survival timer, omen line, weapon chips, l
 - `index.html` — shell, HUD, level-up, and game-over UI
 - `css/style.css` — layout and theme
 - `js/main.js` — boot, art preload, and overlay shortcuts
-- `js/art.js` — PixelLab sprite sheet and graveyard tiles
+- `js/art.js` — PixelLab hunter, enemy sheets, graveyard tiles, and baked decorations
 - `js/fxart.js` — CC0 weapon, impact, and gem sprites
 - `js/game.js` — loop, spawn curve, combat, warden timing, camera, upgrade choices
 - `js/player.js` — movement, stats, XP curve, facing, and the walk cycle
-- `assets/` — `player_sheet.png` and `tileset.png` (PixelLab), plus their JSON metadata
+- `assets/` — PixelLab hunter (`player_sheet.png`), fallback floor (`tileset.png`), enemy sheets (`assets/enemies/`), graveyard floor (`assets/tiles/`), and decorations (`assets/decor/`)
 - `assets/oga/` — CC0 weapon, impact, and gem sprites. Credits are in [assets/CREDITS.md](assets/CREDITS.md)
 - `js/censer.js` — orbiting warding censer
 - `js/pyre.js` — cinder pyre flasks and burning pools
 - `js/cross.js` — ash cross and its returning bolts
 - `js/audio.js` — Web Audio cues and mute
-- `js/enemy.js` — shamblers, bats, brutes, and the warden
+- `js/enemy.js` — shamblers, bats, brutes, and the warden. The first three draw from PixelLab sheets; the warden stays shape-drawn
 - `js/projectile.js` — auto-aimed stakes
 - `js/gem.js` — XP pickups and magnet pull
 - `js/ui.js` — HUD and overlays
@@ -162,7 +162,7 @@ New in this build:
 
 ## v0.5.1 notes for Engineer and QA
 
-Tuning pass on the v0.5.0 night. Art, weapons, and the touch stick are unchanged.
+Tuning pass on the v0.5.0 night, plus PixelLab foes, a graveyard floor, and baked decorations. Weapons and the touch stick are unchanged.
 
 - Crowd ceiling in `maxEnemiesFor` is still `min(ceiling, round(12 + threat * 14))`. The ceiling is 140 before 4:00, 180 before 6:00, and 220 after. `spawnCountFor` uses the same clock for its batch cap: 5, then 6, then 7.
 - Enemy HP scale in `Enemy` is `1 + max(0, t - 30) / 220`. Speed and damage scales are unchanged. Bat chase speed is capped at 200 (absolute; the hunter's base speed is 168, so two Fleet Foot picks can outrun a bat).
@@ -172,10 +172,12 @@ Tuning pass on the v0.5.0 night. Art, weapons, and the touch stick are unchanged
 - Sharpened Stake sets `damage = round(damage * 1.2)`. Hasty Ritual cannot push the attack interval below 0.25s. Grave Magnet starts at 110 and adds 42 up to 320.
 - `cullOneForCap` merges the removed foe's XP into the nearest gem, or drops a gem on that spot. `trimGems` folds overflow gem XP into the gem closest to the hunter, so a later gem cap does not throw that value away.
 - **F3** toggles `#perf` (FPS and live enemy count). It stays off until pressed, including across a restart.
+- Bats, shamblers, and brutes draw from `assets/enemies/{bat,shambler,brute}_sheet.png` (8 facing rows, nearest-neighbor). `bodyBox` width is the hit diameter and its centre sits on the collision point. A short vertical bob stands in for the single walk frame. Damage flashes a cached white copy of the sheet. If a sheet fails to load, that type keeps the old circle. The warden is still drawn in code.
+- The floor prefers `assets/tiles/tileset_graveyard.png`, sliced by each tile's `bounding_box`, through the same cached 8×8 chunks. `assets/tileset.png` is the fallback. About one tile in forty bakes a decoration from `assets/decor/` into that chunk (gravestone, candle, and shrub more often than bones or a buried skull). Decorations do not collide.
 
 Not in this build yet:
 
 - Chests, evolutions, obstacles, or biomes
 - Gamepad
 - Meta progression, accounts, or save data beyond the mute flag
-- Recorded audio samples; cues are still synthesized. Enemies are still drawn in code
+- Recorded audio samples; cues are still synthesized. The warden is still drawn in code

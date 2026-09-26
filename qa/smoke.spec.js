@@ -458,6 +458,66 @@ test("the player sprite loads and facing follows left and right", async ({ page 
   expect(await page.evaluate(() => window.__game.player.facing)).toBe("west");
 });
 
+test("enemy sheets and the graveyard tileset load", async ({ page }) => {
+  await bootMenu(page);
+  const art = await page.evaluate(() => {
+    const game = window.__game;
+    const size = (image) => (image && image.complete && image.naturalWidth > 0
+      ? { width: image.naturalWidth, height: image.naturalHeight, src: image.currentSrc || image.src }
+      : null);
+    return {
+      kind: game.art?.tilesetKind || null,
+      tileset: size(game.sprites.tileset),
+      bat: size(game.sprites.enemies?.bat),
+      shambler: size(game.sprites.enemies?.shambler),
+      brute: size(game.sprites.enemies?.brute),
+    };
+  });
+  expect(art.kind).toBe("graveyard");
+  expect(art.tileset?.src || "").toContain("tileset_graveyard.png");
+  expect(art.tileset.width).toBe(128);
+  expect(art.tileset.height).toBe(128);
+  expect(art.bat.width).toBe(68);
+  expect(art.bat.height).toBe(544);
+  expect(art.bat.src).toContain("bat_sheet.png");
+  expect(art.shambler.width).toBe(92);
+  expect(art.shambler.height).toBe(736);
+  expect(art.shambler.src).toContain("shambler_sheet.png");
+  expect(art.brute.width).toBe(104);
+  expect(art.brute.height).toBe(832);
+  expect(art.brute.src).toContain("brute_sheet.png");
+
+  await beginNight(page);
+  const crowd = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.maxHp = 100000;
+    game.spawnTimer = 999;
+    const target = 220;
+    while (game.enemies.length < target) {
+      const left = target - game.enemies.length;
+      game.spawnEdgeLine("bat", Math.min(30, left));
+      if (game.enemies.length < target) game.spawnRing("brute", Math.min(12, target - game.enemies.length));
+      if (game.enemies.length < target) game.spawnMixed(Math.min(40, target - game.enemies.length));
+    }
+    return game.enemies.length;
+  });
+  expect(crowd).toBeGreaterThanOrEqual(220);
+
+  await page.keyboard.press("F3");
+  await page.waitForFunction(() => window.__game.showPerf && window.__game.fps > 0);
+  const perf = await page.evaluate(() => ({
+    fps: window.__game.fps,
+    enemies: window.__game.enemies.length,
+    text: document.getElementById("perf").textContent,
+  }));
+  expect(perf.enemies).toBeGreaterThanOrEqual(180);
+  expect(perf.text).toContain("FPS");
+  expect(perf.text).toContain("Enemies");
+  expect(perf.fps).toBeGreaterThan(20);
+  console.log(`F3 full crowd: ${perf.text} (raw ${perf.fps.toFixed(1)})`);
+});
+
 async function expectFreshNight(page) {
   const snap = await page.evaluate(() => {
     const game = window.__game;

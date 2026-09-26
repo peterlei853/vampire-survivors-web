@@ -17,7 +17,7 @@ import {
   CROSS_RANGE_STEP,
   AshBolt,
 } from "./cross.js";
-import { Enemy } from "./enemy.js";
+import { bindEnemyArt, Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
 import { MAGNET_MAX, MAGNET_STEP, Player } from "./player.js";
 import { Projectile } from "./projectile.js";
@@ -496,7 +496,11 @@ export class Game {
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.audio = new AudioBus();
     this.art = null;
-    this.sprites = { player: null, tileset: null };
+    this.sprites = {
+      player: null,
+      tileset: null,
+      enemies: { bat: null, shambler: null, brute: null },
+    };
     this.dpr = 1;
     this.viewW = 800;
     this.viewH = 600;
@@ -516,6 +520,12 @@ export class Game {
     this.art = art;
     this.sprites.player = art?.playerImage || null;
     this.sprites.tileset = art?.tilesetImage || null;
+    this.sprites.enemies = {
+      bat: art?.enemies?.bat?.image || null,
+      shambler: art?.enemies?.shambler?.image || null,
+      brute: art?.enemies?.brute?.image || null,
+    };
+    bindEnemyArt(art?.enemies);
     applyFx(art?.fx);
     if (this.player) this.player.attachArt(art);
   }

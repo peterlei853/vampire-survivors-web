@@ -15,7 +15,9 @@ game.setArt(art);
 // Live handle for QA scripts. Not a save file and not a secret.
 // Useful fields: state, time, kills, player (xp, level, facing, censer, pyre, cross),
 // enemies, eliteState, spawnInterval(), input.touch (stick visible / vector),
-// sprites.player (loaded sheet), weaponSummary() (stake, censer, pyre, cross,
+// sprites.player (loaded sheet), sprites.tileset (graveyard floor, or the
+// older tileset if that image failed), sprites.enemies (bat, shambler, brute),
+// weaponSummary() (stake, censer, pyre, cross,
 // magnet, elite, threat), applyUpgrade(id), toggleMute().
 window.__game = game;
 ui.setMuted(game.audio.muted);
