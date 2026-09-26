@@ -942,6 +942,18 @@ test("Enter on the title opens character select and does not start a run", async
   await expect(page.locator("#overlay-start")).toBeHidden();
   await expect(page.locator("#hud")).toBeHidden();
   await expect(page.locator(".char-card.selected")).toHaveAttribute("data-character", "hunter");
+  await expect(page.locator('[data-character="warden_hunter"] .char-tag')).toHaveText("Pierce 1");
+  await expect(page.locator('[data-character="hunter"] .char-tag')).toHaveText("");
+
+  const bars = await page.evaluate(() => {
+    const widths = (id) => [...document.querySelectorAll(`[data-character="${id}"] .stat-fill`)]
+      .map((el) => el.style.width);
+    const labeled = [...document.querySelectorAll(".stat-fill")].some((el) => /\d/.test(el.textContent));
+    return { hunter: widths("hunter"), stakeman: widths("warden_hunter"), labeled };
+  });
+  expect(bars.labeled).toBe(false);
+  expect(bars.hunter).toEqual(["77%", "100%", "75%", "100%"]);
+  expect(bars.stakeman).toEqual(["100%", "89%", "100%", "82%"]);
 
   const before = await page.evaluate(() => ({
     time: window.__game.time,

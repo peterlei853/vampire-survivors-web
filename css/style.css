@@ -487,6 +487,24 @@ button.char-card.selected {
   min-height: 2.7em;
 }
 
+.char-tag {
+  display: block;
+  align-self: flex-start;
+  min-height: 18px;
+  margin-top: 2px;
+  padding: 1px 7px;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  border: 1px solid transparent;
+}
+
+.char-tag:not(:empty) {
+  border-color: rgba(214, 181, 106, 0.55);
+  background: rgba(214, 181, 106, 0.1);
+}
+
 .char-stats {
   display: grid;
   gap: 6px;

@@ -9,7 +9,7 @@ const STATS = [
   { key: "hp", label: "HP" },
   { key: "speed", label: "Speed" },
   { key: "damage", label: "Damage" },
-  { key: "rate", label: "Fire" },
+  { key: "rate", label: "Rate" },
 ];
 
 function statCaps() {
@@ -59,24 +59,30 @@ export function createSelect(game, begin) {
     blurb.className = "char-blurb";
     blurb.textContent = character.blurb;
 
+    const tag = document.createElement("span");
+    tag.className = "char-tag";
+    if (character.pierce > 0) tag.textContent = `Pierce ${character.pierce}`;
+
     const stats = document.createElement("span");
     stats.className = "char-stats";
     for (const stat of STATS) {
       const row = document.createElement("span");
       row.className = "stat";
       const label = document.createElement("span");
+      label.className = "stat-label";
       label.textContent = stat.label;
       const track = document.createElement("span");
       track.className = "stat-track";
       const fill = document.createElement("span");
       fill.className = "stat-fill";
+      // Width is this hunter's stat divided by the higher of the two. The bar itself stays unlabeled.
       fill.style.width = `${Math.round(statRatio(character, stat.key, caps) * 100)}%`;
       track.append(fill);
       row.append(label, track);
       stats.append(row);
     }
 
-    card.append(canvas, name, blurb, stats);
+    card.append(canvas, name, blurb, tag, stats);
     card.addEventListener("click", () => {
       if (index === cardIndex) confirm();
       else choose(cardIndex, true);
