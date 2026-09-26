@@ -1,0 +1,85 @@
+name: pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Official GitHub Pages token permissions.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let an in-progress Pages deploy finish. Newer pushes wait, they do not cancel it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Godot 4.7 publishes one Linux editor binary. It runs headless with --headless.
+      # thread_support is off in export_presets.cfg, so the export uses web_nothreads
+      # and does not need COOP/COEP headers (GitHub Pages cannot set them).
+      - name: Download Godot 4.7.2 and export templates
+        env:
+          GODOT_VERSION: 4.7.2
+        run: |
+          set -euo pipefail
+          ver="$GODOT_VERSION"
+          work="$RUNNER_TEMP/godot"
+          mkdir -p "$work"
+          cd "$work"
+          base="https://github.com/godotengine/godot/releases/download/${ver}-stable"
+          curl -fsSL -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt"
+          curl -fsSL -o "Godot_v${ver}-stable_linux.x86_64.zip" "$base/Godot_v${ver}-stable_linux.x86_64.zip"
+          curl -fsSL -o "Godot_v${ver}-stable_export_templates.tpz" "$base/Godot_v${ver}-stable_export_templates.tpz"
+          grep -F "Godot_v${ver}-stable_linux.x86_64.zip" SHA512-SUMS.txt | sha512sum -c -
+          grep -F "Godot_v${ver}-stable_export_templates.tpz" SHA512-SUMS.txt | sha512sum -c -
+          unzip -q "Godot_v${ver}-stable_linux.x86_64.zip"
+          mkdir -p "$HOME/.local/bin"
+          install -m 755 "Godot_v${ver}-stable_linux.x86_64" "$HOME/.local/bin/godot"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${ver}.stable"
+          unzip -q "Godot_v${ver}-stable_export_templates.tpz"
+          mv templates/* "$HOME/.local/share/godot/export_templates/${ver}.stable/"
+          "$HOME/.local/bin/godot" --version
+
+      - name: Export the web build
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          godot --headless --path godot --export-release "Web" "$PWD/site/index.html"
+          python3 godot/tools/assemble_site.py site
+          test -f site/index.html
+          test -f site/index.wasm
+          test -f site/index.pck
+          test -f site/classic/index.html
+          test -f site/classic/js/main.js
+          test -f site/.nojekyll
+          # Single-threaded export: the page must not ask for SharedArrayBuffer headers.
+          grep -q 'GODOT_THREADS_ENABLED = false' site/index.html
+          grep -q 'href="classic/"' site/index.html
+          grep -q 'href="../"' site/classic/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

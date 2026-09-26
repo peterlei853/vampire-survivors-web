@@ -10,3 +10,6 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Local Godot web export (the pages workflow publishes this, it is not committed)
+/site/
