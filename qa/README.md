@@ -31,7 +31,7 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | the warden leaves idle | Below 90s the elite stays `idle` even at 80 kills; at 90s / 80 kills it reaches `warning` then `alive`. Felling the warden sets `fallen` and leaves one 30 XP gem plus six 5 XP gems |
 | forced level-up offers Ash Cross | The boon overlay includes Ash Cross; choosing it sets `weaponSummary().cross.owned` and the HUD chip to `Cross ×1`, then a bolt appears |
 | Grave Magnet stacks | `applyUpgrade("magnet")` walks 110 → 152 → 194 → 236 → 278 → 320, the HUD reads `Magnet 320`, and a further call is refused. Pickup radius stays 22 |
-| v0.5.1 tuning | Caps, batch sizes, stake ×1.2, haste floor 0.25s, bat speed cap, XP salvage, the three swarms, warden HP on the return, Dawn breaks (paused, Enter restarts), and F3 |
+| v0.5.1 tuning | Caps, batch sizes, stake ×1.2, haste floor 0.25s, bat speed cap, XP salvage, swarms that stack past the cap and pause normal spawns, warden HP on the return, Dawn breaks after a level-up card (even with a living warden), and F3 |
 | touch stick | On desktop the stick stays hidden. A mouse pointer does nothing. A touch drag sets `input.touch` and shows `#stick`. Holding **W** replaces that vector |
 | player sprite and facing | `sprites.player` is a loaded 476×544 sheet. Holding **D** sets `player.facing` to `east` and it stays after release. Holding **A** sets `west` and it stays after release |
 

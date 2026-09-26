@@ -581,6 +581,10 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
     const batXs = new Set(bats.map((enemy) => enemy.x));
     const salvaged = game.gems.reduce((sum, item) => sum + item.value, 0);
     const afterBats = game.enemies.length;
+    const shamblersLeft = game.enemies.filter((enemy) => enemy.type === "shambler" && !enemy.swarm).length;
+    const beforePause = game.enemies.length;
+    game.spawnBatch();
+    const paused = game.enemies.length === beforePause;
 
     game.time = 360;
     game.maybeSwarm();
@@ -642,6 +646,8 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
       oneEdge: batYs.size === 1 || batXs.size === 1,
       salvaged,
       afterBats,
+      shamblersLeft,
+      paused,
       cap,
       ringCount: ring.length,
       ringTight: ringDists.length > 0 && Math.max(...ringDists) - Math.min(...ringDists) < 1,
@@ -675,8 +681,10 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
   expect(tuning.merged).toBe(true);
   expect(tuning.batCount).toBe(30);
   expect(tuning.oneEdge).toBe(true);
-  expect(tuning.salvaged).toBe(60);
-  expect(tuning.afterBats).toBe(tuning.cap);
+  expect(tuning.salvaged).toBe(0);
+  expect(tuning.afterBats).toBe(tuning.cap + 30);
+  expect(tuning.shamblersLeft).toBe(tuning.cap);
+  expect(tuning.paused).toBe(true);
   expect(tuning.ringCount).toBe(12);
   expect(tuning.ringTight).toBe(true);
   expect(tuning.swarmAfterMix - tuning.swarmBeforeMix).toBe(40);
@@ -701,12 +709,25 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
     game.player.hp = 80;
     game.kills = 7;
     game.player.level = 4;
-    game.pendingLevels = 0;
+    game.pendingLevels = 1;
     game.time = 600;
+    game.eliteState = "alive";
     game.state = "playing";
   });
 
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  await expect(page.locator("#overlay-win")).toBeHidden();
+  expect(await page.evaluate(() => {
+    const warden = window.__game.enemies.find((enemy) => enemy.type === "warden");
+    return warden ? warden.hp : 0;
+  })).toBeGreaterThan(0);
+
+  await page.locator("#choices button").first().click();
   await page.waitForFunction(() => window.__game.state === "victory");
+  expect(await page.evaluate(() => {
+    const warden = window.__game.enemies.find((enemy) => enemy.type === "warden");
+    return warden ? warden.hp : 0;
+  })).toBeGreaterThan(0);
   await expect(page.getByRole("heading", { name: "Dawn breaks" })).toBeVisible();
   await expect(page.locator("#overlay-win")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();

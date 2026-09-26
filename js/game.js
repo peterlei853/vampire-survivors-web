@@ -651,11 +651,10 @@ export class Game {
   }
 
   spawnBatch() {
-    const count = spawnCountFor(this.time, this.kills);
-    for (let i = 0; i < count; i += 1) {
-      if (this.enemies.length >= this.maxEnemies() && !this.cullOneForCap()) break;
-      this.spawnAround(this.pickType());
-    }
+    const cap = this.maxEnemies();
+    if (this.enemies.length >= cap) return;
+    const count = Math.min(spawnCountFor(this.time, this.kills), cap - this.enemies.length);
+    for (let i = 0; i < count; i += 1) this.spawnAround(this.pickType());
   }
 
   /**
@@ -680,16 +679,6 @@ export class Game {
     const [removed] = this.enemies.splice(farIndex, 1);
     this.keepXp(removed);
     return true;
-  }
-
-  /** Free slots for an event, then the caller still spawns every body. */
-  makeRoomForCount(count) {
-    const cap = this.maxEnemies();
-    let guard = this.enemies.length;
-    while (this.enemies.length + count > cap && guard > 0) {
-      if (!this.cullOneForCap()) return;
-      guard -= 1;
-    }
   }
 
   keepXp(enemy) {
@@ -724,7 +713,6 @@ export class Game {
   }
 
   spawnEdgeLine(typeName, count) {
-    this.makeRoomForCount(count);
     const side = Math.floor(Math.random() * 4);
     const halfW = this.viewW / 2;
     const halfH = this.viewH / 2;
@@ -753,7 +741,6 @@ export class Game {
   }
 
   spawnRing(typeName, count) {
-    this.makeRoomForCount(count);
     const radius = Math.max(160, Math.min(this.viewW, this.viewH) * 0.36);
     for (let i = 0; i < count; i += 1) {
       const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
@@ -767,7 +754,6 @@ export class Game {
   }
 
   spawnMixed(count) {
-    this.makeRoomForCount(count);
     const types = ["shambler", "bat", "brute"];
     for (let i = 0; i < count; i += 1) {
       const spot = this.offscreenPoint();
@@ -1248,15 +1234,23 @@ export class Game {
   }
 
   finishFrame() {
+    if (this.state !== "playing") return;
     if (this.player.hp <= 0) {
       this.enterGameOver();
       return;
     }
-    if (this.time >= DAWN_TIME) {
-      this.enterVictory();
+    if (this.pendingLevels > 0) {
+      this.openLevelUp();
       return;
     }
-    if (this.pendingLevels > 0 && this.state === "playing") this.openLevelUp();
+    if (this.time >= DAWN_TIME) this.enterVictory();
+  }
+
+  /** Back to the night. Dawn is checked here, after any open level-up cards. */
+  resumePlay() {
+    this.state = "playing";
+    this.ui.setMode("playing");
+    if (this.player.hp > 0 && this.time >= DAWN_TIME) this.enterVictory();
   }
 
   enterVictory() {
@@ -1275,8 +1269,7 @@ export class Game {
     this.currentChoices = rollUpgrades(this.player, 3);
     if (this.currentChoices.length === 0) {
       this.pendingLevels = 0;
-      this.state = "playing";
-      this.ui.setMode("playing");
+      this.resumePlay();
       return;
     }
     this.state = "levelup";
@@ -1295,8 +1288,7 @@ export class Game {
       this.openLevelUp();
       return;
     }
-    this.state = "playing";
-    this.ui.setMode("playing");
+    this.resumePlay();
   }
 
   enterGameOver() {
