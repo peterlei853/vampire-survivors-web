@@ -33,6 +33,7 @@ export class UI {
     this.winSummary = document.getElementById("win-summary");
     this.perf = document.getElementById("perf");
     this.winTitle = document.getElementById("win-title");
+    this.winBanner = document.getElementById("win-banner");
     this.choices = document.getElementById("choices");
     this.summary = document.getElementById("summary");
   }
@@ -176,7 +177,11 @@ export class UI {
 
   showDawn(stats) {
     if (!this.winSummary) return;
-    if (this.winTitle) this.winTitle.textContent = stats.title || "Dawn breaks";
+    if (this.winTitle) this.winTitle.textContent = stats.title || "Dawn breaks — the Lord escapes";
+    if (this.winBanner) {
+      this.winBanner.classList.toggle("hidden", !stats.gold);
+      this.winBanner.textContent = stats.gold ? "Lord slain" : "";
+    }
     this.winSummary.replaceChildren();
     const rows = [
       ["Survived", formatTime(stats.time)],

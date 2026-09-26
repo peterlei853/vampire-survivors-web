@@ -1137,7 +1137,10 @@ export class Game {
     this.floaters.push(new Popup(lord.x, lord.y - 70, "VAMPIRE LORD", "#ffb4a8"));
   }
 
-  /** Bats from the lord's call. They count toward the cap and do not evict anyone. */
+  /**
+   * The lord's bats spawn past the cap, the same as a swarm, so the crowd
+   * may go over 220. They count toward the cap afterwards.
+   */
   spawnLordBats(count) {
     const radius = 150;
     const n = Math.max(0, count | 0);
@@ -1147,7 +1150,7 @@ export class Game {
         "bat",
         this.player.x + Math.cos(angle) * radius,
         this.player.y + Math.sin(angle) * radius,
-        false,
+        true,
       );
     }
   }
@@ -1433,7 +1436,8 @@ export class Game {
       time: this.time,
       kills: this.kills,
       level: this.player.level,
-      title: lord ? "Lord slain" : "Dawn breaks",
+      title: lord ? "Lord slain" : "Dawn breaks — the Lord escapes",
+      gold: lord,
     });
   }
 

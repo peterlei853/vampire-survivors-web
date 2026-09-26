@@ -851,7 +851,7 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
     const warden = window.__game.enemies.find((enemy) => enemy.type === "warden");
     return warden ? warden.hp : 0;
   })).toBeGreaterThan(0);
-  await expect(page.getByRole("heading", { name: "Dawn breaks" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
   await expect(page.locator("#overlay-win")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
   const rows = await page.locator("#win-summary dd").allTextContents();
@@ -1193,7 +1193,7 @@ test("the vampire lord replaces the 580s warden", async ({ page }) => {
     game.pendingLevels = 0;
     game.finishFrame();
   });
-  await expect(page.getByRole("heading", { name: "Dawn breaks" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
   expect(await page.evaluate(() => {
     const lord = window.__game.enemies.find((enemy) => enemy.type === "lord");
     return lord ? lord.hp : 0;
@@ -1235,6 +1235,91 @@ test("dying at 9:30 and restarting clears the boss bar before 9:00", async ({ pa
   expect(restarted.time).toBeLessThan(540);
   expect(restarted.active).toBe(false);
   expect(restarted.lord).toBe(false);
+});
+
+test("surviving to 10:00 says the Lord escapes", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+
+  const quiet = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.pendingLevels = 0;
+    game.time = 600;
+    game.finishFrame();
+    const banner = document.getElementById("win-banner");
+    return {
+      state: game.state,
+      title: document.getElementById("win-title").textContent,
+      bannerHidden: banner.classList.contains("hidden"),
+      lord: game.enemies.some((enemy) => enemy.type === "lord"),
+    };
+  });
+  expect(quiet.state).toBe("victory");
+  expect(quiet.lord).toBe(false);
+  expect(quiet.title).toBe("Dawn breaks — the Lord escapes");
+  expect(quiet.bannerHidden).toBe(true);
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
+  await expect(page.locator("#win-banner")).toBeHidden();
+
+  await page.evaluate(() => window.__begin("hunter"));
+  await page.waitForFunction(() => window.__game.state === "playing" && window.__game.time < 1);
+  const living = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.player.attackTimer = 10;
+    game.debugJumpToLord();
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    game.time = 600;
+    game.pendingLevels = 0;
+    game.finishFrame();
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    const banner = document.getElementById("win-banner");
+    return {
+      state: game.state,
+      title: document.getElementById("win-title").textContent,
+      bannerHidden: banner.classList.contains("hidden"),
+      hp: lord ? lord.hp : 0,
+    };
+  });
+  expect(living.state).toBe("victory");
+  expect(living.hp).toBe(5000);
+  expect(living.title).toBe("Dawn breaks — the Lord escapes");
+  expect(living.bannerHidden).toBe(true);
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
+  await expect(page.locator("#win-banner")).toBeHidden();
+});
+
+test("killing the Lord shows Lord slain on a gold banner", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.debugJumpToLord();
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    lord.hp = 0;
+    game.pendingLevels = 0;
+    game.time = 200;
+    game.state = "playing";
+    game.reapEnemies();
+    game.finishFrame();
+  });
+  await expect(page.getByRole("heading", { name: "Lord slain", exact: true })).toBeVisible();
+  const banner = page.locator("#win-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toHaveText("Lord slain");
+  expect(await banner.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgb(214, 181, 106)");
+  expect(await page.evaluate(() => window.__game.state)).toBe("victory");
+  await expect(page.locator("#overlay-win")).toBeVisible();
 });
 
 test("a 10:00 crowd at the 220 cap stays above 20 fps", async ({ page }) => {

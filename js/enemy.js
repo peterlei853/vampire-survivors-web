@@ -178,7 +178,7 @@ export class Enemy {
     this.y += (dy / dist) * speed * dt;
   }
 
-  /** Marks, bat calls, and the dash. `game` spawns the bats so they join the cap. */
+  /** Marks, bat calls, and the dash. Bat calls spawn past the cap, then count toward it. */
   advanceLord(dt, game) {
     this.lordPhase = this.hp <= this.maxHp * 0.5 ? 2 : 1;
     if (this.lordPhase === 2 && this.markTimer > this.markInterval()) {
