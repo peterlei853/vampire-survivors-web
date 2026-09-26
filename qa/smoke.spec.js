@@ -25,12 +25,14 @@ async function bootMenu(page) {
 
 async function beginNight(page) {
   await page.getByRole("button", { name: "Begin the night" }).click();
+  await page.waitForFunction(() => window.__game.state === "select");
+  await page.keyboard.press("Enter");
   await page.waitForFunction(() => window.__game.state === "playing");
 }
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.5\.0/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.5\.2/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -39,7 +41,7 @@ test("loads the menu with no console errors", async ({ page }) => {
   expect(summary.stake.damage).toBeGreaterThan(0);
   expect(summary.censer.owned).toBe(false);
   expect(summary.cross.owned).toBe(false);
-  expect(summary.magnet.radius).toBe(175);
+  expect(summary.magnet.radius).toBe(110);
   expect(summary.magnet.pickupRadius).toBe(22);
   expect(summary.magnet.stacks).toBe(0);
   expect(summary.threat).toBe(0);
@@ -338,7 +340,7 @@ test("a forced level-up offers Ash Cross and taking it arms the weapon", async (
 test("Grave Magnet stacks the pull radius and the HUD follows", async ({ page }) => {
   await bootMenu(page);
   await beginNight(page);
-  await expect(page.locator("#magnet")).toHaveText("Magnet 175");
+  await expect(page.locator("#magnet")).toHaveText("Magnet 110");
   await expect(page.locator("#magnet")).not.toHaveClass(/armed/);
 
   const steps = await page.evaluate(() => {
@@ -352,8 +354,8 @@ test("Grave Magnet stacks the pull radius and the HUD follows", async ({ page })
       refused: game.applyUpgrade("magnet"),
     };
   });
-  expect(steps.radii).toEqual([175, 223, 271, 319, 320]);
-  expect(steps.stacks).toBe(4);
+  expect(steps.radii).toEqual([110, 152, 194, 236, 278, 320]);
+  expect(steps.stacks).toBe(5);
   expect(steps.pickup).toBe(22);
   expect(steps.refused).toBe(false);
 
@@ -458,6 +460,66 @@ test("the player sprite loads and facing follows left and right", async ({ page 
   expect(await page.evaluate(() => window.__game.player.facing)).toBe("west");
 });
 
+test("enemy sheets and the graveyard tileset load", async ({ page }) => {
+  await bootMenu(page);
+  const art = await page.evaluate(() => {
+    const game = window.__game;
+    const size = (image) => (image && image.complete && image.naturalWidth > 0
+      ? { width: image.naturalWidth, height: image.naturalHeight, src: image.currentSrc || image.src }
+      : null);
+    return {
+      kind: game.art?.tilesetKind || null,
+      tileset: size(game.sprites.tileset),
+      bat: size(game.sprites.enemies?.bat),
+      shambler: size(game.sprites.enemies?.shambler),
+      brute: size(game.sprites.enemies?.brute),
+    };
+  });
+  expect(art.kind).toBe("graveyard");
+  expect(art.tileset?.src || "").toContain("tileset_graveyard.png");
+  expect(art.tileset.width).toBe(128);
+  expect(art.tileset.height).toBe(128);
+  expect(art.bat.width).toBe(68);
+  expect(art.bat.height).toBe(544);
+  expect(art.bat.src).toContain("bat_sheet.png");
+  expect(art.shambler.width).toBe(92);
+  expect(art.shambler.height).toBe(736);
+  expect(art.shambler.src).toContain("shambler_sheet.png");
+  expect(art.brute.width).toBe(104);
+  expect(art.brute.height).toBe(832);
+  expect(art.brute.src).toContain("brute_sheet.png");
+
+  await beginNight(page);
+  const crowd = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.maxHp = 100000;
+    game.spawnTimer = 999;
+    const target = 220;
+    while (game.enemies.length < target) {
+      const left = target - game.enemies.length;
+      game.spawnEdgeLine("bat", Math.min(30, left));
+      if (game.enemies.length < target) game.spawnRing("brute", Math.min(12, target - game.enemies.length));
+      if (game.enemies.length < target) game.spawnMixed(Math.min(40, target - game.enemies.length));
+    }
+    return game.enemies.length;
+  });
+  expect(crowd).toBeGreaterThanOrEqual(220);
+
+  await page.keyboard.press("F3");
+  await page.waitForFunction(() => window.__game.showPerf && window.__game.fps > 0);
+  const perf = await page.evaluate(() => ({
+    fps: window.__game.fps,
+    enemies: window.__game.enemies.length,
+    text: document.getElementById("perf").textContent,
+  }));
+  expect(perf.enemies).toBeGreaterThanOrEqual(180);
+  expect(perf.text).toContain("FPS");
+  expect(perf.text).toContain("Enemies");
+  expect(perf.fps).toBeGreaterThan(20);
+  console.log(`F3 full crowd: ${perf.text} (raw ${perf.fps.toFixed(1)})`);
+});
+
 async function expectFreshNight(page) {
   const snap = await page.evaluate(() => {
     const game = window.__game;
@@ -483,7 +545,473 @@ async function expectFreshNight(page) {
   expect(snap.owned).toBe(false);
   expect(snap.pyre).toBe(false);
   expect(snap.cross).toBe(false);
-  expect(snap.magnet).toBe(175);
+  expect(snap.magnet).toBe(110);
   expect(snap.stacks).toBe(0);
   expect(snap.stake).toBe(1);
 }
+
+test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async ({ page }) => {
+  const problems = await bootMenu(page);
+  await expect(page.locator(".version")).toHaveText("v0.5.2");
+  await expect(page.locator("#perf")).toBeHidden();
+
+  await page.keyboard.press("F3");
+  await expect(page.locator("#perf")).toBeVisible();
+  await expect(page.locator("#perf")).toContainText(/FPS \d+/);
+  await expect(page.locator("#perf")).toContainText("Enemies 0");
+  await page.keyboard.press("F3");
+  await expect(page.locator("#perf")).toBeHidden();
+
+  await beginNight(page);
+  await page.evaluate(() => {
+    window.__game.state = "levelup";
+  });
+
+  const tuning = await page.evaluate(() => {
+    const game = window.__game;
+    const scale = (time) => 1 + Math.max(0, time - 30) / 220;
+    const wardenHp = (time, generation) => Math.round(280 * scale(time) * (1.5 ** generation));
+
+    const damageBefore = game.player.damage;
+    game.applyUpgrade("damage");
+    const damageAfter = game.player.damage;
+    while (game.applyUpgrade("haste")) { /* walk the floor */ }
+    const interval = game.player.attackInterval;
+
+    game.kills = 0;
+    game.time = 239;
+    const capEarly = game.maxEnemies();
+    game.enemies = [];
+    game.spawnBatch();
+    const batchEarly = game.enemies.length;
+
+    game.time = 240;
+    const capFour = game.maxEnemies();
+    game.enemies = [];
+    game.spawnBatch();
+    const batchFour = game.enemies.length;
+
+    game.time = 360;
+    const capSix = game.maxEnemies();
+    game.enemies = [];
+    game.spawnBatch();
+    const batchSix = game.enemies.length;
+
+    game.enemies = [];
+    game.time = 0;
+    game.spawnAround("bat");
+    const earlyBat = game.enemies[0].speed;
+    game.enemies = [];
+    game.time = 400;
+    game.spawnAround("bat");
+    const lateBat = game.enemies[0].speed;
+
+    game.gems = [];
+    game.enemies = [];
+    game.time = 10;
+    game.spawnAround("shambler");
+    const droppedXp = game.enemies[0].xp;
+    game.cullOneForCap();
+    const dropped = game.gems.length === 1 && game.gems[0].value === droppedXp && game.enemies.length === 0;
+
+    game.spawnAround("shambler");
+    game.spawnAround("brute");
+    const sham = game.enemies.find((enemy) => enemy.type === "shambler");
+    const brute = game.enemies.find((enemy) => enemy.type === "brute");
+    sham.x = game.player.x + 12;
+    sham.y = game.player.y;
+    brute.x = game.player.x + 900;
+    brute.y = game.player.y;
+    const gem = game.gems[0];
+    const mergedFrom = gem.value;
+    const bruteXp = brute.xp;
+    game.cullOneForCap();
+    const merged = gem.value === mergedFrom + bruteXp
+      && game.enemies.length === 1
+      && game.enemies[0].type === "shambler";
+
+    game.gems = [];
+    game.enemies = [];
+    game.swarmsSeen = new Set();
+    game.time = 240;
+    game.kills = 0;
+    const cap = game.maxEnemies();
+    for (let i = 0; i < cap; i += 1) game.spawnAround("shambler");
+    game.maybeSwarm();
+    const bats = game.enemies.filter((enemy) => enemy.swarm && enemy.type === "bat");
+    const batYs = new Set(bats.map((enemy) => enemy.y));
+    const batXs = new Set(bats.map((enemy) => enemy.x));
+    const salvaged = game.gems.reduce((sum, item) => sum + item.value, 0);
+    const afterBats = game.enemies.length;
+    const shamblersLeft = game.enemies.filter((enemy) => enemy.type === "shambler" && !enemy.swarm).length;
+    const beforePause = game.enemies.length;
+    game.spawnBatch();
+    const paused = game.enemies.length === beforePause;
+
+    game.time = 360;
+    game.maybeSwarm();
+    const ring = game.enemies.filter((enemy) => enemy.swarm && enemy.type === "brute");
+    const ringDists = ring.map((enemy) => Math.hypot(enemy.x - game.player.x, enemy.y - game.player.y));
+
+    const swarmBeforeMix = game.enemies.filter((enemy) => enemy.swarm).length;
+    game.time = 480;
+    game.maybeSwarm();
+    const swarmAfterMix = game.enemies.filter((enemy) => enemy.swarm).length;
+    game.maybeSwarm();
+    const swarmAgain = game.enemies.filter((enemy) => enemy.swarm).length;
+
+    game.enemies = game.enemies.filter((enemy) => enemy.type !== "warden");
+    game.eliteState = "idle";
+    game.eliteWarning = null;
+    game.wardenAppearances = 0;
+    game.time = 100;
+    game.kills = 0;
+    game.maybeElite();
+    const firstWarned = game.eliteState === "warning";
+    game.eliteWarning.time = game.eliteWarning.duration;
+    game.spawnWarden();
+    const firstHp = game.enemies.find((enemy) => enemy.type === "warden").maxHp;
+    game.enemies = game.enemies.filter((enemy) => enemy.type !== "warden");
+    game.eliteState = "fallen";
+    game.time = 219;
+    game.maybeElite();
+    const held = game.eliteState;
+    game.time = 220;
+    game.maybeElite();
+    const secondWarned = game.eliteState === "warning";
+    game.eliteWarning.time = game.eliteWarning.duration;
+    game.spawnWarden();
+    const secondHp = game.enemies.find((enemy) => enemy.type === "warden").maxHp;
+    game.enemies = game.enemies.filter((enemy) => enemy.type !== "warden");
+    game.eliteState = "fallen";
+    game.time = 340;
+    game.maybeElite();
+    game.eliteWarning.time = game.eliteWarning.duration;
+    game.spawnWarden();
+    const thirdHp = game.enemies.find((enemy) => enemy.type === "warden").maxHp;
+
+    return {
+      damageBefore,
+      damageAfter,
+      interval,
+      capEarly,
+      capFour,
+      capSix,
+      batchEarly,
+      batchFour,
+      batchSix,
+      earlyBat,
+      lateBat,
+      dropped,
+      merged,
+      batCount: bats.length,
+      oneEdge: batYs.size === 1 || batXs.size === 1,
+      salvaged,
+      afterBats,
+      shamblersLeft,
+      paused,
+      cap,
+      ringCount: ring.length,
+      ringTight: ringDists.length > 0 && Math.max(...ringDists) - Math.min(...ringDists) < 1,
+      swarmBeforeMix,
+      swarmAfterMix,
+      swarmAgain,
+      firstWarned,
+      firstHp,
+      held,
+      secondWarned,
+      secondHp,
+      thirdHp,
+      expectFirst: wardenHp(100, 0),
+      expectSecond: wardenHp(220, 1),
+      expectThird: wardenHp(340, 2),
+    };
+  });
+
+  expect(tuning.damageBefore).toBe(12);
+  expect(tuning.damageAfter).toBe(14);
+  expect(tuning.interval).toBe(0.25);
+  expect(tuning.capEarly).toBe(140);
+  expect(tuning.capFour).toBe(180);
+  expect(tuning.capSix).toBe(220);
+  expect(tuning.batchEarly).toBe(5);
+  expect(tuning.batchFour).toBe(6);
+  expect(tuning.batchSix).toBe(7);
+  expect(tuning.earlyBat).toBe(196);
+  expect(tuning.lateBat).toBe(200);
+  expect(tuning.dropped).toBe(true);
+  expect(tuning.merged).toBe(true);
+  expect(tuning.batCount).toBe(30);
+  expect(tuning.oneEdge).toBe(true);
+  expect(tuning.salvaged).toBe(0);
+  expect(tuning.afterBats).toBe(tuning.cap + 30);
+  expect(tuning.shamblersLeft).toBe(tuning.cap);
+  expect(tuning.paused).toBe(true);
+  expect(tuning.ringCount).toBe(12);
+  expect(tuning.ringTight).toBe(true);
+  expect(tuning.swarmAfterMix - tuning.swarmBeforeMix).toBe(40);
+  expect(tuning.swarmAgain).toBe(tuning.swarmAfterMix);
+  expect(tuning.firstWarned).toBe(true);
+  expect(tuning.held).toBe("fallen");
+  expect(tuning.secondWarned).toBe(true);
+  expect(tuning.firstHp).toBe(tuning.expectFirst);
+  expect(tuning.secondHp).toBe(tuning.expectSecond);
+  expect(tuning.thirdHp).toBe(tuning.expectThird);
+
+  await page.evaluate(() => {
+    const game = window.__game;
+    for (const enemy of game.enemies) enemy.hp = 1e9;
+    game.projectiles = [];
+    game.pools = [];
+    game.flasks = [];
+    game.crosses = [];
+    game.gems = [];
+    game.player.attackTimer = 10;
+    game.player.invuln = 10;
+    game.player.hp = 80;
+    game.kills = 7;
+    game.player.level = 4;
+    game.pendingLevels = 1;
+    game.time = 600;
+    game.eliteState = "alive";
+    game.state = "playing";
+  });
+
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  await expect(page.locator("#overlay-win")).toBeHidden();
+  expect(await page.evaluate(() => {
+    const warden = window.__game.enemies.find((enemy) => enemy.type === "warden");
+    return warden ? warden.hp : 0;
+  })).toBeGreaterThan(0);
+
+  await page.locator("#choices button").first().click();
+  await page.waitForFunction(() => window.__game.state === "victory");
+  expect(await page.evaluate(() => {
+    const warden = window.__game.enemies.find((enemy) => enemy.type === "warden");
+    return warden ? warden.hp : 0;
+  })).toBeGreaterThan(0);
+  await expect(page.getByRole("heading", { name: "Dawn breaks" })).toBeVisible();
+  await expect(page.locator("#overlay-win")).toBeVisible();
+  await expect(page.locator("#hud")).toBeHidden();
+  const rows = await page.locator("#win-summary dd").allTextContents();
+  expect(rows).toEqual(["10:00", "7", "4"]);
+
+  const frozen = await page.evaluate(() => {
+    const enemy = window.__game.enemies[0];
+    return {
+      time: window.__game.time,
+      x: enemy ? enemy.x : null,
+      y: enemy ? enemy.y : null,
+    };
+  });
+  await page.waitForTimeout(250);
+  const later = await page.evaluate(() => {
+    const enemy = window.__game.enemies[0];
+    return {
+      time: window.__game.time,
+      x: enemy ? enemy.x : null,
+      y: enemy ? enemy.y : null,
+    };
+  });
+  expect(later).toEqual(frozen);
+
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__game.state === "playing");
+  await expectFreshNight(page);
+  expect(problems, problems.join("\n")).toEqual([]);
+});
+
+test("begin(characterId) applies each hunter, and boons scale from that base", async ({ page }) => {
+  await bootMenu(page);
+
+  const hunter = await page.evaluate(() => {
+    window.__begin("hunter");
+    const game = window.__game;
+    const base = {
+      id: game.player.characterId,
+      hp: game.player.maxHp,
+      speed: game.player.speed,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      pierce: game.player.pierce,
+    };
+    game.applyUpgrade("damage");
+    game.applyUpgrade("haste");
+    game.applyUpgrade("speed");
+    return {
+      base,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      speed: game.player.speed,
+    };
+  });
+  expect(hunter.base).toEqual({
+    id: "hunter",
+    hp: 100,
+    speed: 168,
+    damage: 12,
+    interval: 0.56,
+    pierce: 0,
+  });
+  expect(hunter.damage).toBe(Math.round(12 * 1.2));
+  expect(hunter.interval).toBeCloseTo(Math.max(0.25, 0.56 * 0.88), 5);
+  expect(hunter.speed).toBe(Math.min(400, Math.round(168 * 1.1)));
+
+  const stakeman = await page.evaluate(() => {
+    window.__begin("warden_hunter");
+    const game = window.__game;
+    const base = {
+      id: game.player.characterId,
+      hp: game.player.maxHp,
+      speed: game.player.speed,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      pierce: game.player.pierce,
+      state: game.state,
+      stored: localStorage.getItem("nightfall.character"),
+    };
+    game.applyUpgrade("damage");
+    game.applyUpgrade("haste");
+    game.applyUpgrade("speed");
+    game.applyUpgrade("pierce");
+    const sheet = game.art.characters.warden_hunter;
+    return {
+      base,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      speed: game.player.speed,
+      pierce: game.player.pierce,
+      art: {
+        ready: Boolean(sheet && sheet.image),
+        fallback: Boolean(sheet && sheet.fallback),
+        frameWidth: sheet ? sheet.frameWidth : 0,
+        walkFrames: sheet ? sheet.walkFrames : 0,
+      },
+    };
+  });
+  expect(stakeman.base).toEqual({
+    id: "warden_hunter",
+    hp: 130,
+    speed: 150,
+    damage: 16,
+    interval: 0.68,
+    pierce: 1,
+    state: "playing",
+    stored: "warden_hunter",
+  });
+  expect(stakeman.damage).toBe(Math.round(16 * 1.2));
+  expect(stakeman.interval).toBeCloseTo(Math.max(0.25, 0.68 * 0.88), 5);
+  expect(stakeman.speed).toBe(Math.min(400, Math.round(150 * 1.1)));
+  expect(stakeman.pierce).toBe(2);
+  expect(stakeman.art.ready).toBe(true);
+  if (stakeman.art.fallback) {
+    expect(stakeman.art.frameWidth).toBe(68);
+  } else {
+    expect(stakeman.art.frameWidth).toBe(80);
+    expect(stakeman.art.walkFrames).toBe(6);
+  }
+});
+
+test("a missing or invalid saved character falls back to the hunter", async ({ page }) => {
+  await bootMenu(page);
+  await page.evaluate(() => localStorage.setItem("nightfall.character", "nope"));
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.__game.state === "menu");
+  await page.evaluate(() => window.__begin());
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => window.__game.player.characterId)).toBe("hunter");
+  expect(await page.evaluate(() => localStorage.getItem("nightfall.character"))).toBe("hunter");
+
+  await page.evaluate(() => localStorage.removeItem("nightfall.character"));
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.__game.state === "menu");
+  await page.evaluate(() => window.__begin());
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => ({
+    id: window.__game.player.characterId,
+    hp: window.__game.player.maxHp,
+    stored: localStorage.getItem("nightfall.character"),
+  }))).toEqual({ id: "hunter", hp: 100, stored: "hunter" });
+});
+
+test("Enter on the title opens character select and does not start a run", async ({ page }) => {
+  await bootMenu(page);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__game.state === "select");
+  await expect(page.locator("#overlay-select")).toBeVisible();
+  await expect(page.locator("#overlay-start")).toBeHidden();
+  await expect(page.locator("#hud")).toBeHidden();
+  await expect(page.locator(".char-card.selected")).toHaveAttribute("data-character", "hunter");
+  await expect(page.locator('[data-character="warden_hunter"] .char-tag')).toHaveText("Pierce 1");
+  await expect(page.locator('[data-character="hunter"] .char-tag')).toHaveText("");
+
+  const bars = await page.evaluate(() => {
+    const widths = (id) => [...document.querySelectorAll(`[data-character="${id}"] .stat-fill`)]
+      .map((el) => el.style.width);
+    const labeled = [...document.querySelectorAll(".stat-fill")].some((el) => /\d/.test(el.textContent));
+    return { hunter: widths("hunter"), stakeman: widths("warden_hunter"), labeled };
+  });
+  expect(bars.labeled).toBe(false);
+  expect(bars.hunter).toEqual(["77%", "100%", "75%", "100%"]);
+  expect(bars.stakeman).toEqual(["100%", "89%", "100%", "82%"]);
+
+  const before = await page.evaluate(() => ({
+    time: window.__game.time,
+    enemies: window.__game.enemies.length,
+  }));
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => ({
+    state: window.__game.state,
+    time: window.__game.time,
+    enemies: window.__game.enemies.length,
+  }));
+  expect(after.state).toBe("select");
+  expect(after.time).toBe(before.time);
+  expect(after.enemies).toBe(0);
+
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".char-card.selected")).toHaveAttribute("data-character", "warden_hunter");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => window.__game.player.characterId)).toBe("warden_hunter");
+});
+
+test("Rise again keeps the last character, and C returns to select", async ({ page }) => {
+  await bootMenu(page);
+  await page.evaluate(() => window.__begin("warden_hunter"));
+  await page.waitForFunction(() => window.__game.state === "playing");
+
+  await page.evaluate(() => {
+    window.__game.player.hp = 0;
+  });
+  await page.waitForFunction(() => window.__game.state === "gameover");
+  await page.getByRole("button", { name: "Rise again" }).click();
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => ({
+    id: window.__game.player.characterId,
+    hp: window.__game.player.maxHp,
+    damage: window.__game.player.damage,
+    pierce: window.__game.player.pierce,
+    stored: localStorage.getItem("nightfall.character"),
+  }))).toEqual({
+    id: "warden_hunter",
+    hp: 130,
+    damage: 16,
+    pierce: 1,
+    stored: "warden_hunter",
+  });
+
+  await page.evaluate(() => {
+    window.__game.player.hp = 0;
+  });
+  await page.waitForFunction(() => window.__game.state === "gameover");
+  await page.keyboard.press("c");
+  await page.waitForFunction(() => window.__game.state === "select");
+  await expect(page.locator("#overlay-select")).toBeVisible();
+  const parked = await page.evaluate(() => window.__game.time);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => ({
+    state: window.__game.state,
+    time: window.__game.time,
+  }))).toEqual({ state: "select", time: parked });
+});

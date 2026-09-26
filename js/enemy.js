@@ -1,6 +1,34 @@
 /** Chasers. Spawn stats scale slightly with elapsed night time. */
 
+import { facingIndex } from "./player.js";
+
 let nextId = 1;
+
+/** Sheets from loadArt. A missing image keeps the circle for that type. */
+let enemySheets = null;
+
+const flashCopies = new WeakMap();
+
+export function bindEnemyArt(sheets) {
+  enemySheets = sheets || null;
+}
+
+/** One white copy per sheet. source-atop keeps the sprite's alpha. */
+function tintedSheet(image) {
+  const cached = flashCopies.get(image);
+  if (cached) return cached;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, 0, 0);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  flashCopies.set(image, canvas);
+  return canvas;
+}
 
 export const ENEMY_TYPES = {
   shambler: { hp: 18, speed: 78, radius: 13, color: "#c15a3e", damage: 8, xp: 2 },
@@ -9,10 +37,13 @@ export const ENEMY_TYPES = {
   warden: { hp: 280, speed: 56, radius: 26, color: "#8e243f", damage: 14, xp: 0 },
 };
 
+/** Absolute chase-speed cap, tuned against base move speed 168, not current speed. */
+export const BAT_SPEED_CAP = 200;
+
 export class Enemy {
-  constructor(typeName, x, y, time) {
+  constructor(typeName, x, y, time, hpMultiplier = 1) {
     const base = ENEMY_TYPES[typeName] || ENEMY_TYPES.shambler;
-    const hpScale = 1 + Math.max(0, time - 30) / 110;
+    const hpScale = 1 + Math.max(0, time - 30) / 220;
     const speedScale = 1 + Math.min(0.5, Math.max(0, time - 40) / 220);
     const dmgScale = 1 + Math.max(0, time - 45) / 200;
     this.id = nextId++;
@@ -20,8 +51,11 @@ export class Enemy {
     this.x = x;
     this.y = y;
     this.radius = base.radius;
-    this.speed = base.speed * speedScale;
-    this.maxHp = Math.max(1, Math.round(base.hp * hpScale));
+    this.speed = typeName === "bat"
+      ? Math.min(BAT_SPEED_CAP, base.speed * speedScale)
+      : base.speed * speedScale;
+    const mult = hpMultiplier > 0 ? hpMultiplier : 1;
+    this.maxHp = Math.max(1, Math.round(base.hp * hpScale * mult));
     this.hp = this.maxHp;
     this.damage = Math.max(1, Math.round(base.damage * dmgScale));
     this.xp = base.xp;
@@ -29,6 +63,7 @@ export class Enemy {
     this.hitFlash = 0;
     this.censerCd = 0;
     this.bob = Math.random() * Math.PI * 2;
+    this.facingRow = 0;
     this.phase = "chase";
     this.specialTimer = typeName === "warden" ? 1.5 : 0;
     this.windup = 0;
@@ -46,6 +81,7 @@ export class Enemy {
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.hypot(dx, dy) || 1;
+    if (dx !== 0 || dy !== 0) this.facingRow = facingIndex(dx, dy);
     this.x += (dx / dist) * speed * dt;
     this.y += (dy / dist) * speed * dt;
     this.bob += dt * (this.type === "bat" ? 7 : 3);
@@ -95,6 +131,62 @@ export class Enemy {
       this.drawWarden(ctx, time);
       return;
     }
+    const sheet = enemySheets?.[this.type];
+    if (sheet?.image && sheet.bodyBox?.w > 0) {
+      this.drawSprite(ctx, sheet);
+      return;
+    }
+    this.drawShape(ctx, time);
+  }
+
+  /**
+   * bodyBox width maps onto the hit diameter so the painted body lines up
+   * with the old circle. The body-box centre sits on the collision point.
+   * walkFrames is 1, so a short vertical bob stands in for a cycle.
+   */
+  drawSprite(ctx, sheet) {
+    const box = sheet.bodyBox;
+    const scale = (this.radius * 2) / box.w;
+    const bob = Math.sin(this.bob) * 2.5;
+    const bodyCx = box.x + box.w / 2;
+    const bodyCy = box.y + box.h / 2;
+    const image = this.hitFlash > 0 ? tintedSheet(sheet.image) : sheet.image;
+
+    ctx.save();
+    ctx.translate(Math.round(this.x), Math.round(this.y));
+    ctx.imageSmoothingEnabled = false;
+
+    const footY = (box.h / 2) * scale;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.32)";
+    ctx.beginPath();
+    ctx.ellipse(0, footY, this.radius * 0.85, 4.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.drawImage(
+      image,
+      0,
+      this.facingRow * sheet.frameHeight,
+      sheet.frameWidth,
+      sheet.frameHeight,
+      -bodyCx * scale,
+      -bodyCy * scale + bob,
+      sheet.frameWidth * scale,
+      sheet.frameHeight * scale,
+    );
+    ctx.restore();
+
+    if (this.hp < this.maxHp) {
+      const w = this.radius * 2;
+      const x = this.x - w / 2;
+      const y = this.y + bob - footY - 8;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.fillRect(x, y, w, 3);
+      ctx.fillStyle = "#e15b55";
+      ctx.fillRect(x, y, w * Math.max(0, this.hp / this.maxHp), 3);
+    }
+  }
+
+  drawShape(ctx, time) {
     const flash = this.hitFlash > 0;
     ctx.save();
     ctx.translate(this.x, this.y);

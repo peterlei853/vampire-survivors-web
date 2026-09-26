@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Nightfall — v0.5.0</title>
+  <title>Nightfall — v0.5.2</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%239e2d3a'/%3E%3Cpath d='M8 1.5l1.1 3.4H13l-2.8 2 1.1 3.4L8 8.4 4.7 10.3 5.8 6.9 3 4.9h3.9z' fill='%23efe6d6'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -14,7 +14,7 @@
 
     <div id="hud" class="hidden">
       <div class="hud-top">
-        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.5.0</span></div>
+        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.5.2</span></div>
         <div class="hud-clock">
           <div id="timer" class="timer">00:00</div>
           <div id="omen" class="omen hidden" role="status"></div>
@@ -23,7 +23,7 @@
             <span id="weapon-censer" class="weapon censer locked">Censer</span>
             <span id="weapon-pyre" class="weapon pyre locked">Pyre</span>
             <span id="weapon-cross" class="weapon cross locked">Cross</span>
-            <span id="magnet" class="weapon magnet">Magnet 175</span>
+            <span id="magnet" class="weapon magnet">Magnet 110</span>
           </div>
         </div>
         <div class="level">Lv <span id="level">1</span></div>
@@ -42,19 +42,32 @@
 
     <div id="overlay-start" class="overlay">
       <div class="panel">
-        <p class="eyebrow">Survivors prototype · v0.5.0</p>
+        <p class="eyebrow">Survivors prototype · v0.5.2</p>
         <h1>Nightfall</h1>
-        <p class="lede">Move through the dark. The stake aims itself. Level up to wake a censer, a pyre, or an ash cross, and to pull gems from farther away. Around the second minute, a warden marks the ground before it strikes.</p>
+        <p class="lede">Move through the dark. The stake aims itself. Level up to wake a censer, a pyre, or an ash cross, and to pull gems from farther away. A warden marks the ground before it strikes, and it comes back. Last until dawn.</p>
         <button id="btn-start" type="button">Begin the night</button>
         <ul class="help">
           <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows move. On a phone, drag the stick</li>
           <li>The stake fires on its own. A censer, a pyre, or an ash cross can join it</li>
           <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick a level-up</li>
           <li><kbd>M</kbd> mutes the night</li>
-          <li><kbd>Enter</kbd> starts, and restarts after you fall</li>
+          <li><kbd>F3</kbd> toggles FPS and the enemy count</li>
+          <li><kbd>Enter</kbd> chooses who walks, and restarts after you fall or dawn breaks. <kbd>C</kbd> picks again</li>
         </ul>
       </div>
     </div>
+
+    <div id="overlay-select" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="select-title">
+      <div class="panel wide select-panel">
+        <p class="eyebrow">Who walks tonight</p>
+        <h2 id="select-title">Choose a hunter</h2>
+        <div id="char-cards" class="char-cards"></div>
+        <button id="btn-confirm" type="button">Begin the night</button>
+        <p class="hint"><kbd>A</kbd><kbd>D</kbd> or arrows choose · <kbd>Enter</kbd> confirms</p>
+      </div>
+    </div>
+
+    <div id="night-flash" class="night-flash" aria-hidden="true"></div>
 
     <div id="overlay-level" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="level-title">
       <div class="panel wide">
@@ -70,9 +83,23 @@
         <h2 id="over-title">You fell</h2>
         <dl id="summary" class="summary"></dl>
         <button id="btn-restart" type="button">Rise again</button>
-        <p class="hint"><kbd>Enter</kbd> or <kbd>R</kbd></p>
+        <button id="btn-reselect" class="ghost" type="button">Choose another</button>
+        <p class="hint"><kbd>Enter</kbd> or <kbd>R</kbd> rises again · <kbd>C</kbd> chooses another</p>
       </div>
     </div>
+
+    <div id="overlay-win" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="win-title">
+      <div class="panel">
+        <p class="eyebrow">The night ends</p>
+        <h2 id="win-title">Dawn breaks</h2>
+        <dl id="win-summary" class="summary"></dl>
+        <button id="btn-dawn" type="button">Rise again</button>
+        <button id="btn-reselect-dawn" class="ghost" type="button">Choose another</button>
+        <p class="hint"><kbd>Enter</kbd> rises again · <kbd>C</kbd> chooses another</p>
+      </div>
+    </div>
+
+    <div id="perf" class="perf hidden" aria-hidden="true">FPS 0 · Enemies 0</div>
 
     <div id="stick" class="stick hidden" aria-hidden="true">
       <div class="stick-base"></div>

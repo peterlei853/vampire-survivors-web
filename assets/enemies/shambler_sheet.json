@@ -1,0 +1,23 @@
+{
+  "type": "shambler",
+  "source": "PixelLab: low-health-zombie",
+  "frameWidth": 92,
+  "frameHeight": 92,
+  "rows": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+  ],
+  "walkFrames": 1,
+  "bodyBox": {
+    "x": 32,
+    "y": 14,
+    "w": 28,
+    "h": 62
+  }
+}

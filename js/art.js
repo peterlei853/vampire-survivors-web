@@ -1,11 +1,22 @@
 /** PixelLab sheet and Wang tiles, plus the CC0 weapon sprites. Missing images leave the shape-drawn fallback in place. */
 
+import { CHARACTER_ORDER, CHARACTERS } from "./characters.js";
 import { loadFx } from "./fxart.js";
-
-const PLAYER_URL = new URL("../assets/player_sheet.png", import.meta.url);
-const PLAYER_META_URL = new URL("../assets/player_sheet.json", import.meta.url);
 const TILESET_URL = new URL("../assets/tileset.png", import.meta.url);
 const TILESET_META_URL = new URL("../assets/tileset_metadata.json", import.meta.url);
+const GRAVEYARD_URL = new URL("../assets/tiles/tileset_graveyard.png", import.meta.url);
+const GRAVEYARD_META_URL = new URL("../assets/tiles/tileset_graveyard.json", import.meta.url);
+
+const ENEMY_KINDS = ["bat", "shambler", "brute"];
+
+/** Gravestone, candle, and shrub show up more often than bones or a buried skull. */
+const DECOR_SPECS = [
+  { file: "gravestone_broken.png", weight: 4 },
+  { file: "candle_stub.png", weight: 4 },
+  { file: "dead_shrub.png", weight: 4 },
+  { file: "bones.png", weight: 1 },
+  { file: "skull_buried.png", weight: 1 },
+];
 
 /** Same mix as the dotted backdrop, so patches stay put for a given world cell. */
 function hash01(ix, iy) {
@@ -119,12 +130,31 @@ const CHUNK_TILES = 8;
 const CHUNK_CACHE = 48;
 
 class Ground {
-  constructor(image, rects) {
+  constructor(image, rects, decor = []) {
     this.image = image;
     this.rects = rects;
+    this.decor = decor;
     this.tile = rects[0].w;
     this.chunks = new Map();
     this.order = [];
+  }
+
+  /**
+   * About one tile in forty gets a prop. The salt is offset from the cobble
+   * hash so paths and decorations do not lock to the same cells.
+   */
+  decorAt(ix, iy) {
+    const props = this.decor;
+    if (props.length === 0) return null;
+    if (hash01(ix + 101, iy - 57) >= 1 / 40) return null;
+    let total = 0;
+    for (const prop of props) total += prop.weight;
+    let roll = hash01(ix - 19, iy + 73) * total;
+    for (const prop of props) {
+      roll -= prop.weight;
+      if (roll < 0) return prop.image;
+    }
+    return props[props.length - 1].image;
   }
 
   chunkCanvas(cx, cy) {
@@ -157,6 +187,8 @@ class Ground {
           ctx.fillStyle = index === 15 ? "rgba(2, 4, 10, 0.4)" : "rgba(2, 4, 10, 0.22)";
           ctx.fillRect(lx * tile, ly * tile, tile, tile);
         }
+        const prop = this.decorAt(cx * CHUNK_TILES + lx, cy * CHUNK_TILES + ly);
+        if (prop) ctx.drawImage(prop, lx * tile, ly * tile, tile, tile);
       }
     }
     this.chunks.set(key, canvas);
@@ -196,35 +228,159 @@ class Ground {
 }
 
 /**
- * Resolve both images before the first frame. A failed image is null and the
- * caller keeps the previous drawing path for that layer.
+ * Resolve sheets before the first frame. A failed enemy image keeps that
+ * type on the circle path. A failed graveyard tileset falls back to the
+ * older floor image.
  */
+async function loadEnemySheet(kind) {
+  const imageUrl = new URL(`../assets/enemies/${kind}_sheet.png`, import.meta.url);
+  const metaUrl = new URL(`../assets/enemies/${kind}_sheet.json`, import.meta.url);
+  const [image, meta] = await Promise.all([loadImage(imageUrl), loadJson(metaUrl)]);
+  const body = meta?.bodyBox;
+  if (!image || !body || !(body.w > 0) || !(body.h > 0)) return null;
+  return {
+    image,
+    frameWidth: meta.frameWidth || image.naturalWidth,
+    frameHeight: meta.frameHeight || image.naturalHeight,
+    walkFrames: meta.walkFrames || 1,
+    bodyBox: { x: body.x, y: body.y, w: body.w, h: body.h },
+  };
+}
+
+const FACING_ROWS = [
+  "south",
+  "south-east",
+  "east",
+  "north-east",
+  "north",
+  "north-west",
+  "west",
+  "south-west",
+];
+
+function sheetFrom(image, meta, defaults) {
+  if (!image) return null;
+  const rows = Array.isArray(meta?.rows) && meta.rows.length === 8 ? meta.rows : defaults.rows;
+  return {
+    image,
+    frameWidth: meta?.frameWidth || defaults.frameWidth,
+    frameHeight: meta?.frameHeight || defaults.frameHeight,
+    rows,
+    walkFrames: meta?.walkFrames || defaults.walkFrames,
+    fallback: false,
+  };
+}
+
+function assetUrl(path) {
+  return new URL(`../${path}`, import.meta.url);
+}
+
+/** Try each file pair on the character row. The first image that loads wins. */
+async function loadCharacterArt(character) {
+  const spec = character.sheet;
+  if (!spec || spec.ready === false) return null;
+  const defaults = {
+    frameWidth: spec.frameWidth || 68,
+    frameHeight: spec.frameHeight || 68,
+    rows: FACING_ROWS,
+    walkFrames: spec.walkFrames || 6,
+  };
+  for (const file of spec.files || []) {
+    const [image, meta] = await Promise.all([
+      loadImage(assetUrl(file.image)),
+      loadJson(assetUrl(file.meta)),
+    ]);
+    const sheet = sheetFrom(image, meta, defaults);
+    if (sheet) return sheet;
+  }
+  return null;
+}
+
+async function loadCharacterSheets() {
+  const entries = await Promise.all(CHARACTER_ORDER.map(async (id) => [
+    id,
+    await loadCharacterArt(CHARACTERS[id]),
+  ]));
+  const sheets = Object.fromEntries(entries);
+  for (const id of CHARACTER_ORDER) {
+    const tint = CHARACTERS[id].tintFallback;
+    if (!sheets[id] && tint && sheets[tint]) sheets[id] = darkenSheet(sheets[tint]);
+  }
+  return sheets;
+}
+
+/** Opaque pixels of the hunter sheet, pulled toward night so a missing body still reads as someone else. */
+function darkenSheet(sheet) {
+  const source = sheet.image;
+  const canvas = document.createElement("canvas");
+  canvas.width = source.naturalWidth || source.width;
+  canvas.height = source.naturalHeight || source.height;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(source, 0, 0);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = "rgba(10, 8, 16, 0.55)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return { ...sheet, image: canvas, fallback: true };
+}
+
+async function loadDecor() {
+  const loaded = await Promise.all(DECOR_SPECS.map(async (spec) => {
+    const image = await loadImage(new URL(`../assets/decor/${spec.file}`, import.meta.url));
+    return image ? { image, weight: spec.weight } : null;
+  }));
+  return loaded.filter(Boolean);
+}
+
 export async function loadArt() {
-  const [playerImage, playerMeta, tilesetImage, tilesetMeta, fx] = await Promise.all([
-    loadImage(PLAYER_URL),
-    loadJson(PLAYER_META_URL),
+  const [
+    characters,
+    graveyardImage,
+    graveyardMeta,
+    classicImage,
+    classicMeta,
+    enemies,
+    decor,
+    fx,
+  ] = await Promise.all([
+    loadCharacterSheets(),
+    loadImage(GRAVEYARD_URL),
+    loadJson(GRAVEYARD_META_URL),
     loadImage(TILESET_URL),
     loadJson(TILESET_META_URL),
+    Promise.all(ENEMY_KINDS.map(async (kind) => [kind, await loadEnemySheet(kind)])),
+    loadDecor(),
     loadFx(),
   ]);
 
-  const rows = Array.isArray(playerMeta?.rows) && playerMeta.rows.length === 8
-    ? playerMeta.rows
-    : ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"];
+  const hunterSheet = characters.hunter;
+  const playerImage = hunterSheet?.image || null;
+  const rows = hunterSheet?.rows || FACING_ROWS;
 
+  let tilesetImage = null;
+  let tilesetKind = null;
   let ground = null;
-  if (tilesetImage) {
-    const rects = rectsFromMeta(tilesetMeta) || FALLBACK_TILE_RECTS;
-    ground = new Ground(tilesetImage, rects);
+  const graveyardRects = graveyardImage ? rectsFromMeta(graveyardMeta) : null;
+  if (graveyardImage && graveyardRects) {
+    tilesetImage = graveyardImage;
+    tilesetKind = "graveyard";
+    ground = new Ground(graveyardImage, graveyardRects, decor);
+  } else if (classicImage) {
+    tilesetImage = classicImage;
+    tilesetKind = "classic";
+    ground = new Ground(classicImage, rectsFromMeta(classicMeta) || FALLBACK_TILE_RECTS, decor);
   }
 
   return {
     playerImage,
     tilesetImage,
-    frameWidth: playerMeta?.frameWidth || 68,
-    frameHeight: playerMeta?.frameHeight || 68,
+    tilesetKind,
+    enemies: Object.fromEntries(enemies),
+    frameWidth: hunterSheet?.frameWidth || 68,
+    frameHeight: hunterSheet?.frameHeight || 68,
     rows,
-    walkFrames: playerMeta?.walkFrames || 6,
+    walkFrames: hunterSheet?.walkFrames || 6,
+    characters,
     ground,
     fx,
   };

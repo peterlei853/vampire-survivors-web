@@ -45,6 +45,21 @@ canvas {
 
 .hidden { display: none !important; }
 
+.perf {
+  position: absolute;
+  z-index: 30;
+  left: 22px;
+  bottom: 78px;
+  padding: 4px 8px;
+  pointer-events: none;
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #d7f5c4;
+  background: rgba(0, 0, 0, 0.62);
+  font-variant-numeric: tabular-nums;
+}
+
 #hud {
   position: absolute;
   inset: 0;
@@ -410,6 +425,155 @@ kbd {
 .summary dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.char-cards {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 22px;
+  margin: 20px 0 16px;
+  padding: 14px 6px 6px;
+}
+
+button.char-card {
+  flex: 1 1 0;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 14px 14px 16px;
+  text-align: left;
+  color: var(--ink);
+  background: #1b1822;
+  border: 1px solid rgba(239, 230, 214, 0.16);
+  transform: scale(1);
+  transform-origin: center bottom;
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out, border-color 150ms ease-out;
+}
+
+button.char-card:hover {
+  background: #231f2b;
+  border-color: rgba(239, 230, 214, 0.4);
+}
+
+button.char-card.selected {
+  transform: scale(1.1);
+  border-color: rgba(239, 230, 214, 0.9);
+  box-shadow: 0 0 0 2px rgba(239, 230, 214, 0.72), 0 0 22px rgba(239, 230, 214, 0.32);
+  z-index: 1;
+}
+
+.char-portrait {
+  display: block;
+  width: 112px;
+  height: 112px;
+  margin: 0 auto 4px;
+  image-rendering: pixelated;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.05), transparent 70%);
+}
+
+.char-name {
+  font-family: Georgia, Palatino, serif;
+  font-size: 22px;
+}
+
+.char-blurb {
+  color: var(--muted);
+  font-family: Georgia, Palatino, serif;
+  font-size: 14px;
+  line-height: 1.35;
+  min-height: 2.7em;
+}
+
+.char-tag {
+  display: block;
+  align-self: flex-start;
+  min-height: 18px;
+  margin-top: 2px;
+  padding: 1px 7px;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  border: 1px solid transparent;
+}
+
+.char-tag:not(:empty) {
+  border-color: rgba(214, 181, 106, 0.55);
+  background: rgba(214, 181, 106, 0.1);
+}
+
+.char-stats {
+  display: grid;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.stat {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat-track {
+  display: block;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stat-fill {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+}
+
+#overlay-over button,
+#overlay-win button,
+#btn-confirm {
+  display: block;
+}
+
+button.ghost {
+  display: block;
+  margin-top: 10px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid rgba(239, 230, 214, 0.35);
+}
+
+button.ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.night-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.night-flash.flash {
+  animation: night-flash 480ms ease-out;
+}
+
+@keyframes night-flash {
+  0% { opacity: 1; }
+  28% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.char-card { transition: none; }
+  .night-flash.flash { animation: none; }
 }
 
 @media (max-width: 720px) {
