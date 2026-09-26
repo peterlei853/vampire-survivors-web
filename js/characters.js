@@ -14,11 +14,14 @@ export const CHARACTERS = {
     pierce: 0,
     artKey: "hunter",
     sheet: {
-      frameWidth: 68,
-      frameHeight: 68,
+      frameWidth: 64,
+      frameHeight: 64,
       walkFrames: 6,
       files: [
-        { image: "assets/player_sheet.png", meta: "assets/player_sheet.json" },
+        {
+          image: "assets/characters/hunter/hunter_sheet.png",
+          meta: "assets/characters/hunter/hunter_sheet.json",
+        },
       ],
     },
   },
@@ -32,8 +35,6 @@ export const CHARACTERS = {
     attackInterval: 0.68,
     pierce: 1,
     artKey: "stakeman",
-    /** Same facing rows as the hunter. A failed load still uses the hunter sheet, tinted darker. */
-    tintFallback: "hunter",
     sheet: {
       frameWidth: 64,
       frameHeight: 64,

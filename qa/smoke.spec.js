@@ -440,11 +440,14 @@ test("the player sprite loads and facing follows left and right", async ({ page 
       loaded: Boolean(image && image.complete && image.naturalWidth > 0),
       width: image ? image.naturalWidth : 0,
       height: image ? image.naturalHeight : 0,
+      src: image ? (image.currentSrc || image.src) : "",
     };
   });
   expect(sheet.loaded).toBe(true);
-  expect(sheet.width).toBe(476);
-  expect(sheet.height).toBe(544);
+  expect(sheet.width).toBe(448);
+  expect(sheet.height).toBe(512);
+  expect(sheet.src).toContain("/characters/hunter/hunter_sheet.png");
+  expect(sheet.src).not.toContain("player_sheet");
 
   await beginNight(page);
   await page.keyboard.down("d");
@@ -458,6 +461,45 @@ test("the player sprite loads and facing follows left and right", async ({ page 
   await page.keyboard.up("a");
   await page.waitForFunction(() => !window.__game.input.down.has("KeyA"));
   expect(await page.evaluate(() => window.__game.player.facing)).toBe("west");
+});
+
+test("each character's card and sprite share a sheet, and player_sheet is never requested", async ({ page }) => {
+  const playerSheetHits = [];
+  page.on("request", (request) => {
+    if (request.url().includes("player_sheet")) playerSheetHits.push(request.url());
+  });
+  await bootMenu(page);
+  await page.getByRole("button", { name: "Begin the night" }).click();
+  await page.waitForFunction(() => {
+    const hunter = document.querySelector('[data-character="hunter"] canvas');
+    const stakeman = document.querySelector('[data-character="warden_hunter"] canvas');
+    return Boolean(hunter?.dataset.sheet && stakeman?.dataset.sheet);
+  });
+  const previews = await page.evaluate(() => ({
+    hunter: document.querySelector('[data-character="hunter"] canvas').dataset.sheet,
+    warden_hunter: document.querySelector('[data-character="warden_hunter"] canvas').dataset.sheet,
+  }));
+  expect(previews.hunter).toContain("/characters/hunter/hunter_sheet.png");
+  expect(previews.warden_hunter).toContain("/characters/stakeman/stakeman_sheet.png");
+
+  for (const id of ["hunter", "warden_hunter"]) {
+    await page.evaluate((characterId) => window.__begin(characterId), id);
+    await page.waitForFunction(
+      (characterId) => window.__game.state === "playing" && window.__game.player.characterId === characterId,
+      id,
+    );
+    const played = await page.evaluate(() => {
+      const image = window.__game.player.art?.playerImage;
+      const live = window.__game.sprites.player;
+      return {
+        sprite: image ? (image.currentSrc || image.src) : "",
+        handle: live ? (live.currentSrc || live.src) : "",
+      };
+    });
+    expect(played.sprite).toBe(previews[id]);
+    expect(played.handle).toBe(previews[id]);
+  }
+  expect(playerSheetHits).toEqual([]);
 });
 
 test("enemy sheets and the graveyard tileset load", async ({ page }) => {

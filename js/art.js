@@ -295,7 +295,6 @@ function sheetFrom(image, meta, defaults) {
     frameHeight: Number.isFinite(frameHeight) && frameHeight > 0 ? frameHeight : defaults.frameHeight,
     rows,
     walkFrames: meta ? frameCount(meta) : frameCount({ walkFrames: defaults.walkFrames }),
-    fallback: false,
   };
   const body = meta?.bodyBox;
   if (body && body.w > 0 && body.h > 0) {
@@ -314,8 +313,8 @@ async function loadCharacterArt(character) {
   const spec = character.sheet;
   if (!spec || spec.ready === false) return null;
   const defaults = {
-    frameWidth: spec.frameWidth || 68,
-    frameHeight: spec.frameHeight || 68,
+    frameWidth: spec.frameWidth || 64,
+    frameHeight: spec.frameHeight || 64,
     rows: FACING_ROWS,
     walkFrames: spec.walkFrames || 6,
   };
@@ -335,27 +334,7 @@ async function loadCharacterSheets() {
     id,
     await loadCharacterArt(CHARACTERS[id]),
   ]));
-  const sheets = Object.fromEntries(entries);
-  for (const id of CHARACTER_ORDER) {
-    const tint = CHARACTERS[id].tintFallback;
-    if (!sheets[id] && tint && sheets[tint]) sheets[id] = darkenSheet(sheets[tint]);
-  }
-  return sheets;
-}
-
-/** Opaque pixels of the hunter sheet, pulled toward night so a missing body still reads as someone else. */
-function darkenSheet(sheet) {
-  const source = sheet.image;
-  const canvas = document.createElement("canvas");
-  canvas.width = source.naturalWidth || source.width;
-  canvas.height = source.naturalHeight || source.height;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(source, 0, 0);
-  ctx.globalCompositeOperation = "source-atop";
-  ctx.fillStyle = "rgba(10, 8, 16, 0.55)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  return { ...sheet, image: canvas, fallback: true };
+  return Object.fromEntries(entries);
 }
 
 async function loadDecor() {
@@ -412,8 +391,8 @@ export async function loadArt() {
     tilesetImage,
     tilesetKind,
     enemies: { ...Object.fromEntries(enemies), lord },
-    frameWidth: hunterSheet?.frameWidth || 68,
-    frameHeight: hunterSheet?.frameHeight || 68,
+    frameWidth: hunterSheet?.frameWidth || 64,
+    frameHeight: hunterSheet?.frameHeight || 64,
     rows,
     walkFrames: hunterSheet?.walkFrames || 6,
     characters,

@@ -26,9 +26,9 @@ const FACINGS = [
 const WALK_FPS = 10;
 
 /**
- * On-screen body height for both hunters. The hunter sheet has no bodyBox;
- * its painted figure is about 52px of the 68px cell, with the foot near y=57.
- * A sheet that brings a bodyBox uses that box instead. Radius stays 14.
+ * On-screen body height for both hunters. A sheet's bodyBox puts the feet on
+ * the entity. Radius stays 14. The cell numbers below are only for a sheet
+ * that arrives without a bodyBox.
  */
 const BODY_HEIGHT = 48;
 const HUNTER_CELL = 68;

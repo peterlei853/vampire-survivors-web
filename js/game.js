@@ -623,6 +623,8 @@ export class Game {
   start(characterId) {
     this.characterId = characterById(characterId ?? this.characterId).id;
     this.resetWorld();
+    const live = this.player.art?.playerImage;
+    if (live) this.sprites.player = live;
     this.state = "playing";
     for (let i = 0; i < 4; i += 1) this.spawnAround("shambler");
     this.ui.setMode("playing");

@@ -128,6 +128,7 @@ export function createSelect(game, begin) {
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!sheet?.image) continue;
+      canvas.dataset.sheet = sheet.image.currentSrc || sheet.image.src;
       const frameW = sheet.frameWidth;
       const frameH = sheet.frameHeight;
       const row = Math.max(0, (sheet.rows || []).indexOf("south"));
