@@ -460,6 +460,8 @@ export class Game {
     this.ui = ui;
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.audio = new AudioBus();
+    this.art = null;
+    this.sprites = { player: null, tileset: null };
     this.dpr = 1;
     this.viewW = 800;
     this.viewH = 600;
@@ -470,8 +472,17 @@ export class Game {
     this.state = "menu";
   }
 
+  /** Called once images have settled, including when a sheet failed to load. */
+  setArt(art) {
+    this.art = art;
+    this.sprites.player = art?.playerImage || null;
+    this.sprites.tileset = art?.tilesetImage || null;
+    if (this.player) this.player.attachArt(art);
+  }
+
   resetWorld() {
     this.player = new Player(0, 0);
+    if (this.art) this.player.attachArt(this.art);
     this.enemies = [];
     this.projectiles = [];
     this.crosses = [];
@@ -1125,6 +1136,7 @@ export class Game {
     const w = this.viewW;
     const h = this.viewH;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, w, h);
 
     let shakeX = 0;
@@ -1171,6 +1183,15 @@ export class Game {
   }
 
   drawBackground(ctx, w, h, shakeX, shakeY) {
+    const ground = this.art?.ground;
+    if (ground) {
+      ctx.fillStyle = "#071018";
+      ctx.fillRect(0, 0, w, h);
+      ground.draw(ctx, this.camera, w, h, shakeX, shakeY);
+      ctx.fillStyle = "rgba(6, 8, 16, 0.34)";
+      ctx.fillRect(0, 0, w, h);
+      return;
+    }
     ctx.fillStyle = "#10141c";
     ctx.fillRect(0, 0, w, h);
     const spacing = 64;

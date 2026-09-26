@@ -1,5 +1,6 @@
 /** Boots Nightfall and binds the menu, level-up, and restart keys. */
 
+import { loadArt } from "./art.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
 import { UI } from "./ui.js";
@@ -8,12 +9,14 @@ const canvas = document.getElementById("game");
 const input = new Input();
 const ui = new UI();
 const game = new Game(canvas, input, ui);
+const art = await loadArt();
+game.setArt(art);
 
 // Live handle for QA scripts. Not a save file and not a secret.
-// Useful fields: state, time, kills, player (xp, level, censer, pyre, cross), enemies,
-// eliteState, spawnInterval(), input.touch (stick visible / vector),
-// weaponSummary() (stake, censer, pyre, cross, magnet, elite, threat),
-// applyUpgrade(id), toggleMute().
+// Useful fields: state, time, kills, player (xp, level, facing, censer, pyre, cross),
+// enemies, eliteState, spawnInterval(), input.touch (stick visible / vector),
+// sprites.player (loaded sheet), weaponSummary() (stake, censer, pyre, cross,
+// magnet, elite, threat), applyUpgrade(id), toggleMute().
 window.__game = game;
 ui.setMuted(game.audio.muted);
 

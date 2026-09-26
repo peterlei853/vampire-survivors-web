@@ -1,6 +1,6 @@
 # Nightfall smoke suite
 
-Automated smoke checks for the v0.4.0 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.4.0). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
+Automated smoke checks for the v0.5.0 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.0). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
 
 Assertions go through the live handle in `js/main.js`:
 
@@ -11,6 +11,8 @@ Assertions go through the live handle in `js/main.js`:
 - `window.__game.toggleMute()` and `audio.muted` for the sound bus
 - `window.__game.applyUpgrade(id)` to take a catalog boon without waiting on the roll
 - `window.__game.currentChoices` while the boon overlay is open
+- `window.__game.sprites.player` for the loaded hunter sheet
+- `window.__game.player.facing` for the 8-way direction name (`south`, `east`, `west`, …)
 
 No gameplay numbers are changed in source. Level-up is forced by granting the XP still needed to leave level 1 and queueing `pendingLevels`, which the next frame turns into the normal boon overlay. Game over is forced by setting `player.hp` to 0. The Warden spec writes `time` and `kills` on the live object so the 90s / 80-kill gate opens on the next frame. It also raises HP and the XP target, and later parks the hunter away from the drop, so a death, a level-up pause, or gem pickup cannot cut the telegraph short. Those writes stay in the spec.
 
@@ -30,6 +32,7 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | forced level-up offers Ash Cross | The boon overlay includes Ash Cross; choosing it sets `weaponSummary().cross.owned` and the HUD chip to `Cross ×1`, then a bolt appears |
 | Grave Magnet stacks | `applyUpgrade("magnet")` walks 175 → 223 → 271 → 319 → 320, the HUD reads `Magnet 320`, and a fifth call is refused. Pickup radius stays 22 |
 | touch stick | On desktop the stick stays hidden. A mouse pointer does nothing. A touch drag sets `input.touch` and shows `#stick`. Holding **W** replaces that vector |
+| player sprite and facing | `sprites.player` is a loaded 476×544 sheet. Holding **D** sets `player.facing` to `east` and it stays after release. Holding **A** sets `west` and it stays after release |
 
 ## Run
 

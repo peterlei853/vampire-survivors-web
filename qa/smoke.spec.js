@@ -30,7 +30,7 @@ async function beginNight(page) {
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.4\.0/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.5\.0/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -428,6 +428,34 @@ test("the touch stick stays hidden for a mouse until a touch drags it", async ({
   expect(released.x).toBe(0);
   expect(released.y).toBe(0);
   await expect(page.locator("#stick")).toHaveClass(/hidden/);
+});
+
+test("the player sprite loads and facing follows left and right", async ({ page }) => {
+  await bootMenu(page);
+  const sheet = await page.evaluate(() => {
+    const image = window.__game.sprites.player;
+    return {
+      loaded: Boolean(image && image.complete && image.naturalWidth > 0),
+      width: image ? image.naturalWidth : 0,
+      height: image ? image.naturalHeight : 0,
+    };
+  });
+  expect(sheet.loaded).toBe(true);
+  expect(sheet.width).toBe(476);
+  expect(sheet.height).toBe(544);
+
+  await beginNight(page);
+  await page.keyboard.down("d");
+  await page.waitForFunction(() => window.__game.player.facing === "east");
+  await page.keyboard.up("d");
+  await page.waitForFunction(() => !window.__game.input.down.has("KeyD"));
+  expect(await page.evaluate(() => window.__game.player.facing)).toBe("east");
+
+  await page.keyboard.down("a");
+  await page.waitForFunction(() => window.__game.player.facing === "west");
+  await page.keyboard.up("a");
+  await page.waitForFunction(() => !window.__game.input.down.has("KeyA"));
+  expect(await page.evaluate(() => window.__game.player.facing)).toBe("west");
 });
 
 async function expectFreshNight(page) {

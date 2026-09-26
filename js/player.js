@@ -9,6 +9,35 @@ export const MAGNET_BASE = 175;
 export const MAGNET_STEP = 48;
 export const MAGNET_MAX = 320;
 
+/** Sheet row order: south, then counter-clockwise through the diagonals. */
+const FACINGS = [
+  "south",
+  "south-east",
+  "east",
+  "north-east",
+  "north",
+  "north-west",
+  "west",
+  "south-west",
+];
+
+/** Walk cycle while the movement axis is held. Idle is column 0. */
+const WALK_FPS = 10;
+
+/**
+ * On-screen size of one 68px cell.
+ * The figure inside the cell is about 22×52 source pixels, so 40px draws her
+ * about 30px tall: 1.5× the old 20px body, with the soles on the radius-14 hitbox.
+ */
+const SPRITE_DRAW = 40;
+
+/** 8-way index for a screen-space vector. 0 is south, then SE, E, NE, N, NW, W, SW. */
+export function facingIndex(x, y) {
+  const deg = Math.atan2(y, x) * (180 / Math.PI);
+  const index = Math.round((90 - deg) / 45);
+  return ((index % 8) + 8) % 8;
+}
+
 /**
  * XP required to leave `level`.
  * The first step is a short fight (twenty shambler gems, 40 XP).
@@ -43,17 +72,34 @@ export class Player {
     this.pickupRadius = 22;
     this.invuln = 0;
     this.aim = 0;
+    this.facingRow = 0;
+    this.facing = FACINGS[0];
+    this.walkTime = 0;
+    this.moving = false;
+    this.art = null;
     this.censer = new Censer();
     this.pyre = new Pyre();
     this.cross = new AshCross();
   }
 
+  attachArt(art) {
+    this.art = art && art.playerImage ? art : null;
+    const name = this.art?.rows?.[this.facingRow];
+    if (name) this.facing = name;
+  }
+
   update(dt, axis) {
-    if (axis.x !== 0 || axis.y !== 0) {
+    const moving = axis.x !== 0 || axis.y !== 0;
+    if (moving) {
       this.x += axis.x * this.speed * dt;
       this.y += axis.y * this.speed * dt;
       this.aim = Math.atan2(axis.y, axis.x);
+      if (!this.moving) this.walkTime = 0;
+      this.walkTime += dt;
+      this.facingRow = facingIndex(axis.x, axis.y);
+      this.facing = this.art?.rows?.[this.facingRow] || FACINGS[this.facingRow];
     }
+    this.moving = moving;
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);
     if (this.attackTimer > 0) this.attackTimer = Math.max(0, this.attackTimer - dt);
   }
@@ -73,6 +119,47 @@ export class Player {
   }
 
   draw(ctx, time) {
+    if (this.art?.playerImage) {
+      this.drawSprite(ctx, time);
+      return;
+    }
+    this.drawShape(ctx, time);
+  }
+
+  drawSprite(ctx, time) {
+    const art = this.art;
+    const image = art.playerImage;
+    const frameW = art.frameWidth;
+    const frameH = art.frameHeight;
+    const col = this.moving
+      ? 1 + (Math.floor(this.walkTime * WALK_FPS) % art.walkFrames)
+      : 0;
+    ctx.save();
+    ctx.translate(Math.round(this.x), Math.round(this.y));
+    if (this.hp <= 0) ctx.globalAlpha = 0.45;
+    else if (this.invuln > 0) ctx.globalAlpha = 0.45 + 0.4 * Math.sin(time * 30);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.beginPath();
+    ctx.ellipse(0, 12, 9, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      image,
+      col * frameW,
+      this.facingRow * frameH,
+      frameW,
+      frameH,
+      -SPRITE_DRAW / 2,
+      -SPRITE_DRAW / 2,
+      SPRITE_DRAW,
+      SPRITE_DRAW,
+    );
+    ctx.restore();
+  }
+
+  drawShape(ctx, time) {
     ctx.save();
     ctx.translate(this.x, this.y);
     if (this.hp <= 0) ctx.globalAlpha = 0.45;
