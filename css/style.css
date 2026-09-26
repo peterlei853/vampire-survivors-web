@@ -45,6 +45,21 @@ canvas {
 
 .hidden { display: none !important; }
 
+.perf {
+  position: absolute;
+  z-index: 30;
+  left: 22px;
+  bottom: 78px;
+  padding: 4px 8px;
+  pointer-events: none;
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #d7f5c4;
+  background: rgba(0, 0, 0, 0.62);
+  font-variant-numeric: tabular-nums;
+}
+
 #hud {
   position: absolute;
   inset: 0;

@@ -1,6 +1,6 @@
 # Nightfall smoke suite
 
-Automated smoke checks for the v0.5.0 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.0). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
+Automated smoke checks for the v0.5.1 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.1). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the v0.5.1 tuning pass. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
 
 Assertions go through the live handle in `js/main.js`:
 
@@ -30,7 +30,8 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | mute flips | `toggleMute()`, **M**, and **Sound on** / **Muted** each flip `audio.muted`, the button label, and `aria-pressed` |
 | the warden leaves idle | Below 90s the elite stays `idle` even at 80 kills; at 90s / 80 kills it reaches `warning` then `alive`. Felling the warden sets `fallen` and leaves one 30 XP gem plus six 5 XP gems |
 | forced level-up offers Ash Cross | The boon overlay includes Ash Cross; choosing it sets `weaponSummary().cross.owned` and the HUD chip to `Cross ×1`, then a bolt appears |
-| Grave Magnet stacks | `applyUpgrade("magnet")` walks 175 → 223 → 271 → 319 → 320, the HUD reads `Magnet 320`, and a fifth call is refused. Pickup radius stays 22 |
+| Grave Magnet stacks | `applyUpgrade("magnet")` walks 110 → 152 → 194 → 236 → 278 → 320, the HUD reads `Magnet 320`, and a further call is refused. Pickup radius stays 22 |
+| v0.5.1 tuning | Caps, batch sizes, stake ×1.2, haste floor 0.25s, bat speed cap, XP salvage, the three swarms, warden HP on the return, Dawn breaks (paused, Enter restarts), and F3 |
 | touch stick | On desktop the stick stays hidden. A mouse pointer does nothing. A touch drag sets `input.touch` and shows `#stick`. Holding **W** replaces that vector |
 | player sprite and facing | `sprites.player` is a loaded 476×544 sheet. Holding **D** sets `player.facing` to `east` and it stays after release. Holding **A** sets `west` and it stays after release |
 

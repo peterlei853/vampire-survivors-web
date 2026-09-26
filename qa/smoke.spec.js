@@ -30,7 +30,7 @@ async function beginNight(page) {
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.5\.0/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.5\.1/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -39,7 +39,7 @@ test("loads the menu with no console errors", async ({ page }) => {
   expect(summary.stake.damage).toBeGreaterThan(0);
   expect(summary.censer.owned).toBe(false);
   expect(summary.cross.owned).toBe(false);
-  expect(summary.magnet.radius).toBe(175);
+  expect(summary.magnet.radius).toBe(110);
   expect(summary.magnet.pickupRadius).toBe(22);
   expect(summary.magnet.stacks).toBe(0);
   expect(summary.threat).toBe(0);
@@ -338,7 +338,7 @@ test("a forced level-up offers Ash Cross and taking it arms the weapon", async (
 test("Grave Magnet stacks the pull radius and the HUD follows", async ({ page }) => {
   await bootMenu(page);
   await beginNight(page);
-  await expect(page.locator("#magnet")).toHaveText("Magnet 175");
+  await expect(page.locator("#magnet")).toHaveText("Magnet 110");
   await expect(page.locator("#magnet")).not.toHaveClass(/armed/);
 
   const steps = await page.evaluate(() => {
@@ -352,8 +352,8 @@ test("Grave Magnet stacks the pull radius and the HUD follows", async ({ page })
       refused: game.applyUpgrade("magnet"),
     };
   });
-  expect(steps.radii).toEqual([175, 223, 271, 319, 320]);
-  expect(steps.stacks).toBe(4);
+  expect(steps.radii).toEqual([110, 152, 194, 236, 278, 320]);
+  expect(steps.stacks).toBe(5);
   expect(steps.pickup).toBe(22);
   expect(steps.refused).toBe(false);
 
@@ -483,7 +483,257 @@ async function expectFreshNight(page) {
   expect(snap.owned).toBe(false);
   expect(snap.pyre).toBe(false);
   expect(snap.cross).toBe(false);
-  expect(snap.magnet).toBe(175);
+  expect(snap.magnet).toBe(110);
   expect(snap.stacks).toBe(0);
   expect(snap.stake).toBe(1);
 }
+
+test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async ({ page }) => {
+  const problems = await bootMenu(page);
+  await expect(page.locator(".version")).toHaveText("v0.5.1");
+  await expect(page.locator("#perf")).toBeHidden();
+
+  await page.keyboard.press("F3");
+  await expect(page.locator("#perf")).toBeVisible();
+  await expect(page.locator("#perf")).toContainText(/FPS \d+/);
+  await expect(page.locator("#perf")).toContainText("Enemies 0");
+  await page.keyboard.press("F3");
+  await expect(page.locator("#perf")).toBeHidden();
+
+  await beginNight(page);
+  await page.evaluate(() => {
+    window.__game.state = "levelup";
+  });
+
+  const tuning = await page.evaluate(() => {
+    const game = window.__game;
+    const scale = (time) => 1 + Math.max(0, time - 30) / 220;
+    const wardenHp = (time, generation) => Math.round(280 * scale(time) * (1.5 ** generation));
+
+    const damageBefore = game.player.damage;
+    game.applyUpgrade("damage");
+    const damageAfter = game.player.damage;
+    while (game.applyUpgrade("haste")) { /* walk the floor */ }
+    const interval = game.player.attackInterval;
+
+    game.kills = 0;
+    game.time = 239;
+    const capEarly = game.maxEnemies();
+    game.enemies = [];
+    game.spawnBatch();
+    const batchEarly = game.enemies.length;
+
+    game.time = 240;
+    const capFour = game.maxEnemies();
+    game.enemies = [];
+    game.spawnBatch();
+    const batchFour = game.enemies.length;
+
+    game.time = 360;
+    const capSix = game.maxEnemies();
+    game.enemies = [];
+    game.spawnBatch();
+    const batchSix = game.enemies.length;
+
+    game.enemies = [];
+    game.time = 0;
+    game.spawnAround("bat");
+    const earlyBat = game.enemies[0].speed;
+    game.enemies = [];
+    game.time = 400;
+    game.spawnAround("bat");
+    const lateBat = game.enemies[0].speed;
+
+    game.gems = [];
+    game.enemies = [];
+    game.time = 10;
+    game.spawnAround("shambler");
+    const droppedXp = game.enemies[0].xp;
+    game.cullOneForCap();
+    const dropped = game.gems.length === 1 && game.gems[0].value === droppedXp && game.enemies.length === 0;
+
+    game.spawnAround("shambler");
+    game.spawnAround("brute");
+    const sham = game.enemies.find((enemy) => enemy.type === "shambler");
+    const brute = game.enemies.find((enemy) => enemy.type === "brute");
+    sham.x = game.player.x + 12;
+    sham.y = game.player.y;
+    brute.x = game.player.x + 900;
+    brute.y = game.player.y;
+    const gem = game.gems[0];
+    const mergedFrom = gem.value;
+    const bruteXp = brute.xp;
+    game.cullOneForCap();
+    const merged = gem.value === mergedFrom + bruteXp
+      && game.enemies.length === 1
+      && game.enemies[0].type === "shambler";
+
+    game.gems = [];
+    game.enemies = [];
+    game.swarmsSeen = new Set();
+    game.time = 240;
+    game.kills = 0;
+    const cap = game.maxEnemies();
+    for (let i = 0; i < cap; i += 1) game.spawnAround("shambler");
+    game.maybeSwarm();
+    const bats = game.enemies.filter((enemy) => enemy.swarm && enemy.type === "bat");
+    const batYs = new Set(bats.map((enemy) => enemy.y));
+    const batXs = new Set(bats.map((enemy) => enemy.x));
+    const salvaged = game.gems.reduce((sum, item) => sum + item.value, 0);
+    const afterBats = game.enemies.length;
+
+    game.time = 360;
+    game.maybeSwarm();
+    const ring = game.enemies.filter((enemy) => enemy.swarm && enemy.type === "brute");
+    const ringDists = ring.map((enemy) => Math.hypot(enemy.x - game.player.x, enemy.y - game.player.y));
+
+    const swarmBeforeMix = game.enemies.filter((enemy) => enemy.swarm).length;
+    game.time = 480;
+    game.maybeSwarm();
+    const swarmAfterMix = game.enemies.filter((enemy) => enemy.swarm).length;
+    game.maybeSwarm();
+    const swarmAgain = game.enemies.filter((enemy) => enemy.swarm).length;
+
+    game.enemies = game.enemies.filter((enemy) => enemy.type !== "warden");
+    game.eliteState = "idle";
+    game.eliteWarning = null;
+    game.wardenAppearances = 0;
+    game.time = 100;
+    game.kills = 0;
+    game.maybeElite();
+    const firstWarned = game.eliteState === "warning";
+    game.eliteWarning.time = game.eliteWarning.duration;
+    game.spawnWarden();
+    const firstHp = game.enemies.find((enemy) => enemy.type === "warden").maxHp;
+    game.enemies = game.enemies.filter((enemy) => enemy.type !== "warden");
+    game.eliteState = "fallen";
+    game.time = 219;
+    game.maybeElite();
+    const held = game.eliteState;
+    game.time = 220;
+    game.maybeElite();
+    const secondWarned = game.eliteState === "warning";
+    game.eliteWarning.time = game.eliteWarning.duration;
+    game.spawnWarden();
+    const secondHp = game.enemies.find((enemy) => enemy.type === "warden").maxHp;
+    game.enemies = game.enemies.filter((enemy) => enemy.type !== "warden");
+    game.eliteState = "fallen";
+    game.time = 340;
+    game.maybeElite();
+    game.eliteWarning.time = game.eliteWarning.duration;
+    game.spawnWarden();
+    const thirdHp = game.enemies.find((enemy) => enemy.type === "warden").maxHp;
+
+    return {
+      damageBefore,
+      damageAfter,
+      interval,
+      capEarly,
+      capFour,
+      capSix,
+      batchEarly,
+      batchFour,
+      batchSix,
+      earlyBat,
+      lateBat,
+      dropped,
+      merged,
+      batCount: bats.length,
+      oneEdge: batYs.size === 1 || batXs.size === 1,
+      salvaged,
+      afterBats,
+      cap,
+      ringCount: ring.length,
+      ringTight: ringDists.length > 0 && Math.max(...ringDists) - Math.min(...ringDists) < 1,
+      swarmBeforeMix,
+      swarmAfterMix,
+      swarmAgain,
+      firstWarned,
+      firstHp,
+      held,
+      secondWarned,
+      secondHp,
+      thirdHp,
+      expectFirst: wardenHp(100, 0),
+      expectSecond: wardenHp(220, 1),
+      expectThird: wardenHp(340, 2),
+    };
+  });
+
+  expect(tuning.damageBefore).toBe(12);
+  expect(tuning.damageAfter).toBe(14);
+  expect(tuning.interval).toBe(0.25);
+  expect(tuning.capEarly).toBe(140);
+  expect(tuning.capFour).toBe(180);
+  expect(tuning.capSix).toBe(220);
+  expect(tuning.batchEarly).toBe(5);
+  expect(tuning.batchFour).toBe(6);
+  expect(tuning.batchSix).toBe(7);
+  expect(tuning.earlyBat).toBe(196);
+  expect(tuning.lateBat).toBe(200);
+  expect(tuning.dropped).toBe(true);
+  expect(tuning.merged).toBe(true);
+  expect(tuning.batCount).toBe(30);
+  expect(tuning.oneEdge).toBe(true);
+  expect(tuning.salvaged).toBe(60);
+  expect(tuning.afterBats).toBe(tuning.cap);
+  expect(tuning.ringCount).toBe(12);
+  expect(tuning.ringTight).toBe(true);
+  expect(tuning.swarmAfterMix - tuning.swarmBeforeMix).toBe(40);
+  expect(tuning.swarmAgain).toBe(tuning.swarmAfterMix);
+  expect(tuning.firstWarned).toBe(true);
+  expect(tuning.held).toBe("fallen");
+  expect(tuning.secondWarned).toBe(true);
+  expect(tuning.firstHp).toBe(tuning.expectFirst);
+  expect(tuning.secondHp).toBe(tuning.expectSecond);
+  expect(tuning.thirdHp).toBe(tuning.expectThird);
+
+  await page.evaluate(() => {
+    const game = window.__game;
+    for (const enemy of game.enemies) enemy.hp = 1e9;
+    game.projectiles = [];
+    game.pools = [];
+    game.flasks = [];
+    game.crosses = [];
+    game.gems = [];
+    game.player.attackTimer = 10;
+    game.player.invuln = 10;
+    game.player.hp = 80;
+    game.kills = 7;
+    game.player.level = 4;
+    game.pendingLevels = 0;
+    game.time = 600;
+    game.state = "playing";
+  });
+
+  await page.waitForFunction(() => window.__game.state === "victory");
+  await expect(page.getByRole("heading", { name: "Dawn breaks" })).toBeVisible();
+  await expect(page.locator("#overlay-win")).toBeVisible();
+  await expect(page.locator("#hud")).toBeHidden();
+  const rows = await page.locator("#win-summary dd").allTextContents();
+  expect(rows).toEqual(["10:00", "7", "4"]);
+
+  const frozen = await page.evaluate(() => {
+    const enemy = window.__game.enemies[0];
+    return {
+      time: window.__game.time,
+      x: enemy ? enemy.x : null,
+      y: enemy ? enemy.y : null,
+    };
+  });
+  await page.waitForTimeout(250);
+  const later = await page.evaluate(() => {
+    const enemy = window.__game.enemies[0];
+    return {
+      time: window.__game.time,
+      x: enemy ? enemy.x : null,
+      y: enemy ? enemy.y : null,
+    };
+  });
+  expect(later).toEqual(frozen);
+
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__game.state === "playing");
+  await expectFreshNight(page);
+  expect(problems, problems.join("\n")).toEqual([]);
+});

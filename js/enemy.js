@@ -9,10 +9,13 @@ export const ENEMY_TYPES = {
   warden: { hp: 280, speed: 56, radius: 26, color: "#8e243f", damage: 14, xp: 0 },
 };
 
+/** Absolute chase-speed cap, tuned against base move speed 168, not current speed. */
+export const BAT_SPEED_CAP = 200;
+
 export class Enemy {
-  constructor(typeName, x, y, time) {
+  constructor(typeName, x, y, time, hpMultiplier = 1) {
     const base = ENEMY_TYPES[typeName] || ENEMY_TYPES.shambler;
-    const hpScale = 1 + Math.max(0, time - 30) / 110;
+    const hpScale = 1 + Math.max(0, time - 30) / 220;
     const speedScale = 1 + Math.min(0.5, Math.max(0, time - 40) / 220);
     const dmgScale = 1 + Math.max(0, time - 45) / 200;
     this.id = nextId++;
@@ -20,8 +23,11 @@ export class Enemy {
     this.x = x;
     this.y = y;
     this.radius = base.radius;
-    this.speed = base.speed * speedScale;
-    this.maxHp = Math.max(1, Math.round(base.hp * hpScale));
+    this.speed = typeName === "bat"
+      ? Math.min(BAT_SPEED_CAP, base.speed * speedScale)
+      : base.speed * speedScale;
+    const mult = hpMultiplier > 0 ? hpMultiplier : 1;
+    this.maxHp = Math.max(1, Math.round(base.hp * hpScale * mult));
     this.hp = this.maxHp;
     this.damage = Math.max(1, Math.round(base.damage * dmgScale));
     this.xp = base.xp;

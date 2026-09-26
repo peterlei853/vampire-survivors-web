@@ -2,16 +2,35 @@
 
 import { drawCell, fx } from "./fxart.js";
 
+function styleFor(value) {
+  return {
+    size: value >= 20 ? 13 : value >= 5 ? 8 : 6,
+    color: value >= 20 ? "#fff1c2" : value >= 5 ? "#e6c36a" : "#7ddec0",
+    rich: value >= 20,
+  };
+}
+
 export class Gem {
   constructor(x, y, value) {
     this.x = x;
     this.y = y;
     this.value = value;
-    this.size = value >= 20 ? 13 : value >= 5 ? 8 : 6;
-    this.color = value >= 20 ? "#fff1c2" : value >= 5 ? "#e6c36a" : "#7ddec0";
-    this.rich = value >= 20;
+    const style = styleFor(value);
+    this.size = style.size;
+    this.color = style.color;
+    this.rich = style.rich;
     this.bob = Math.random() * Math.PI * 2;
     this.age = 0;
+  }
+
+  /** Fold more XP into this gem so a cull never throws the value away. */
+  addValue(amount) {
+    if (!amount) return;
+    this.value += amount;
+    const style = styleFor(this.value);
+    this.size = style.size;
+    this.color = style.color;
+    this.rich = style.rich;
   }
 
   update(dt, player) {

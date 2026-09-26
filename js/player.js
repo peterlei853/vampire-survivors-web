@@ -5,8 +5,8 @@ import { Censer } from "./censer.js";
 import { Pyre } from "./pyre.js";
 
 /** Baseline gem pull. Grave Magnet adds MAGNET_STEP up to MAGNET_MAX. */
-export const MAGNET_BASE = 175;
-export const MAGNET_STEP = 48;
+export const MAGNET_BASE = 110;
+export const MAGNET_STEP = 42;
 export const MAGNET_MAX = 320;
 
 /** Sheet row order: south, then counter-clockwise through the diagonals. */
