@@ -43,7 +43,7 @@ export class Gem {
     if (fx.gems) {
       const col = this.rich ? 0 : this.value >= 5 ? 2 : 1;
       const row = this.rich ? 2 : this.value >= 5 ? 1 : 0;
-      const draw = this.rich ? 18 : this.value >= 5 ? 14 : 12;
+      const draw = this.rich ? 16 : this.value >= 5 ? 16 : 14;
       ctx.save();
       ctx.translate(this.x, this.y + bob);
       drawCell(ctx, fx.gems, 3, 3, col, row, draw);

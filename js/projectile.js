@@ -26,7 +26,7 @@ export class Projectile {
     if (fx.bolt) {
       ctx.save();
       ctx.translate(this.x, this.y);
-      drawStrip(ctx, fx.bolt, 6, -this.life * 12, 22, angle);
+      drawStrip(ctx, fx.bolt, 6, -this.life * 12, 32, angle);
       ctx.restore();
       return;
     }

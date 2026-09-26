@@ -98,7 +98,7 @@ export class Censer {
         const spoke = spokes[i];
         ctx.save();
         ctx.translate(spoke.x1, spoke.y1);
-        drawStrip(ctx, fx.orb, 6, time * 10 + i, 18);
+        drawStrip(ctx, fx.orb, 6, time * 10 + i, 24);
         ctx.restore();
       }
       return;

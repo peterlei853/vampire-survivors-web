@@ -25,11 +25,15 @@ const FACINGS = [
 const WALK_FPS = 10;
 
 /**
- * On-screen size of one 68px cell.
- * The figure inside the cell is about 22×52 source pixels, so 40px draws her
- * about 30px tall: 1.5× the old 20px body, with the soles on the radius-14 hitbox.
+ * The painted figure is about 52px of the 68px cell (lots of empty margin).
+ * Drawing the cell at 86px, nearest-neighbor, puts her about 66px tall at
+ * 1280×720: inside the 60–72px range, a little over 1× the source cell.
+ * The figure is centred on the hitbox. Radius stays 14.
  */
-const SPRITE_DRAW = 40;
+const SPRITE_DRAW = 86;
+const FIGURE_CX = 33.5;
+const FIGURE_CY = 32.5;
+const FIGURE_FOOT = 57;
 
 /** 8-way index for a screen-space vector. 0 is south, then SE, E, NE, N, NW, W, SW. */
 export function facingIndex(x, y) {
@@ -139,9 +143,14 @@ export class Player {
     if (this.hp <= 0) ctx.globalAlpha = 0.45;
     else if (this.invuln > 0) ctx.globalAlpha = 0.45 + 0.4 * Math.sin(time * 30);
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    const scale = SPRITE_DRAW / frameW;
+    const footY = (FIGURE_FOOT - FIGURE_CY) * scale;
+    const shadow = ctx.createRadialGradient(0, footY, 2, 0, footY, 24);
+    shadow.addColorStop(0, "rgba(0, 0, 0, 0.55)");
+    shadow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = shadow;
     ctx.beginPath();
-    ctx.ellipse(0, 12, 9, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, footY, 24, 8, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.imageSmoothingEnabled = false;
@@ -151,10 +160,10 @@ export class Player {
       this.facingRow * frameH,
       frameW,
       frameH,
-      -SPRITE_DRAW / 2,
-      -SPRITE_DRAW / 2,
+      -FIGURE_CX * scale,
+      -FIGURE_CY * scale,
       SPRITE_DRAW,
-      SPRITE_DRAW,
+      SPRITE_DRAW * (frameH / frameW),
     );
     ctx.restore();
   }

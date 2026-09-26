@@ -77,7 +77,7 @@ export class PyreFlask {
     if (fx.fireball) {
       ctx.save();
       ctx.translate(this.x, this.y);
-      drawStrip(ctx, fx.fireball, 6, -this.life * 14, 20, Math.atan2(dy, dx));
+      drawStrip(ctx, fx.fireball, 6, -this.life * 14, 28, Math.atan2(dy, dx));
       ctx.restore();
       return;
     }
@@ -129,13 +129,13 @@ export class PyrePool {
       ctx.globalAlpha = 0.35 + fade * 0.65;
       ctx.translate(this.x, this.y + 4);
       const frame = time * 10;
-      drawStrip(ctx, fx.firebomb, 6, frame, 18, 0);
+      drawStrip(ctx, fx.firebomb, 6, frame, 26, 0);
       const reach = Math.max(8, this.radius - 12);
       for (let i = 0; i < 4; i += 1) {
         const angle = time * 1.3 + (i * Math.PI) / 2;
         ctx.save();
         ctx.translate(Math.cos(angle) * reach, Math.sin(angle) * reach * 0.55);
-        drawStrip(ctx, fx.firebomb, 6, frame + i * 1.5, 16, 0);
+        drawStrip(ctx, fx.firebomb, 6, frame + i * 1.5, 22, 0);
         ctx.restore();
       }
       ctx.restore();

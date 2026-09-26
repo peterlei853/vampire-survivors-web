@@ -100,7 +100,7 @@ export class AshBolt {
     if (fx.cross) {
       ctx.save();
       ctx.translate(this.x, this.y);
-      drawStrip(ctx, fx.cross, 1, 0, 28, this.spin);
+      drawStrip(ctx, fx.cross, 1, 0, 46, this.spin);
       ctx.restore();
       return;
     }

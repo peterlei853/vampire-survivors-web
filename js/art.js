@@ -38,17 +38,29 @@ const FALLBACK_TILE_RECTS = [
   { x: 0, y: 96, w: 32, h: 32 },
 ];
 
-const PATCH = 5;
+function mod(n, span) {
+  return ((n % span) + span) % span;
+}
 
+/**
+ * Short one-tile paths, not slabs. Most 12-tile regions stay pure dirt.
+ * A path is a few cobblestone corners in a straight run so the Wang edges
+ * show up as a narrow strip.
+ */
 function cobbleCorner(ix, iy) {
-  const cx = Math.floor(ix / PATCH);
-  const cy = Math.floor(iy / PATCH);
-  if (hash01(cx + 19, cy - 7) > 0.18) return false;
-  const lx = ix - cx * PATCH;
-  const ly = iy - cy * PATCH;
-  const edge = lx === 0 || ly === 0 || lx === PATCH - 1 || ly === PATCH - 1;
-  if (!edge) return true;
-  return hash01(ix, iy) > 0.4;
+  const span = 12;
+  const cx = Math.floor(ix / span);
+  const cy = Math.floor(iy / span);
+  if (hash01(cx + 11, cy - 4) > 0.14) return false;
+  const lx = mod(ix, span);
+  const ly = mod(iy, span);
+  const horizontal = hash01(cx + 2, cy + 5) < 0.5;
+  const along = horizontal ? lx : ly;
+  const across = horizontal ? ly : lx;
+  const lane = 5;
+  if (across !== lane && across !== lane + 1) return false;
+  const length = hash01(cx + 7, cy + 3) > 0.5 ? 5 : 4;
+  return along >= 3 && along < 3 + length;
 }
 
 function wangIndex(tx, ty) {
@@ -141,6 +153,10 @@ class Ground {
           tile,
           tile,
         );
+        if (index !== 0) {
+          ctx.fillStyle = index === 15 ? "rgba(2, 4, 10, 0.4)" : "rgba(2, 4, 10, 0.22)";
+          ctx.fillRect(lx * tile, ly * tile, tile, tile);
+        }
       }
     }
     this.chunks.set(key, canvas);

@@ -425,7 +425,7 @@ class Spark {
     ctx.globalAlpha = alpha;
     ctx.translate(this.x, this.y);
     const frame = (1 - alpha) * 4;
-    if (!drawStrip(ctx, fx.spark, 5, frame, 14)) {
+    if (!drawStrip(ctx, fx.spark, 5, frame, 20)) {
       ctx.fillStyle = this.color;
       ctx.fillRect(0, 0, this.radius, this.radius);
     }
@@ -1198,6 +1198,10 @@ export class Game {
       ground.draw(ctx, this.camera, w, h, shakeX, shakeY);
       ctx.fillStyle = "rgba(6, 8, 16, 0.34)";
       ctx.fillRect(0, 0, w, h);
+      if (this.state === "menu") {
+        ctx.fillStyle = "rgba(4, 6, 12, 0.5)";
+        ctx.fillRect(0, 0, w, h);
+      }
       return;
     }
     ctx.fillStyle = "#10141c";
