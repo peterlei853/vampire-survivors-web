@@ -4,6 +4,12 @@ Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the 
 
 This is an original prototype. It is not affiliated with poncle or Vampire Survivors.
 
+## Play
+
+The Godot port is the page at [https://peterlei853.github.io/vampire-survivors-web/](https://peterlei853.github.io/vampire-survivors-web/). The original canvas game stays at [https://peterlei853.github.io/vampire-survivors-web/classic/](https://peterlei853.github.io/vampire-survivors-web/classic/). Each page links to the other.
+
+GitHub Pages publishes that site from the `pages` workflow on every push to `main` (and when the workflow is run by hand). The repository Pages source has to be **GitHub Actions**.
+
 ## Run
 
 The client is HTML, CSS, and JavaScript modules. Load it through a static server. Opening `index.html` via `file://` will not start the game, because browsers block ES modules there.
@@ -24,7 +30,9 @@ npm start
 
 ## Godot
 
-A native port of the same night is in [`godot/`](godot/). It is GDScript only (no C#, no addons) and uses the **Compatibility** renderer so it can run on a laptop with integrated graphics. Open it in **Godot 4.3 or newer**. This port was checked with Godot 4.7.2. The web files are unchanged.
+A native port of the same night is in [`godot/`](godot/). It is GDScript only (no C#, no addons) and uses the **Compatibility** renderer so it can run on a laptop with integrated graphics. Open it in **Godot 4.3 or newer**. This port was checked with Godot 4.7.2. The canvas sources at the repo root are unchanged; the Pages artifact copies them to `/classic/`.
+
+The web export preset is **Web**, with thread support off (`variant/thread_support=false`). That is the single-threaded build, so the page does not need `SharedArrayBuffer` or COOP/COEP headers. GitHub Pages cannot set those headers. The workflow downloads Godot 4.7.2 and the matching export templates, exports with `--headless`, and deploys with the official Pages actions. Audio starts after a click or a key press. The canvas takes keyboard focus when the engine starts, and **Enter** begins the night.
 
 On Windows: install Godot 4 from [godotengine.org](https://godotengine.org/download), choose **Import** (or Open), and select `godot/project.godot`. Press **F5** to play. Click the game view if the keys do not respond. The Compatibility renderer is already set in the project.
 
