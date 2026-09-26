@@ -40,6 +40,8 @@ export const ELITE_KILLS = 80;
 export const ELITE_WARN = 2.4;
 /** Later wardens are on a fixed clock: 220, 340, 460, … (100 + n×120). */
 export const ELITE_INTERVAL = 120;
+/** Each later warden multiplies base HP by this, then the night's time scale. */
+export const WARDEN_HP_MULT = 1.25;
 /** Surviving this long ends the night. */
 export const DAWN_TIME = 600;
 const HASTE_FLOOR = 0.25;
@@ -1015,7 +1017,7 @@ export class Game {
     if (!spot || this.eliteState !== "warning") return;
     const generation = this.wardenAppearances;
     this.wardenAppearances += 1;
-    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time, 1.5 ** generation));
+    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time, WARDEN_HP_MULT ** generation));
     this.eliteState = "alive";
     this.omen = "The Warden is here";
     this.omenTimer = 2.2;
