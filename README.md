@@ -1,6 +1,6 @@
 # vampire-survivors-web
 
-Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.5.1 is a playable night: move with the keyboard or a touch stick, auto-attack with a stake, an unlockable censer, pyre, and ash cross, pull gems in with a magnet boon, level up, and survive a spawn curve that starts sparse, thickens, and brings a warden around the second minute and again later. Last until dawn at ten minutes. The hunter and the ground are PixelLab pixel art. Weapons, impacts, and gems are CC0 sprites from OpenGameArt, listed in [assets/CREDITS.md](assets/CREDITS.md).
+Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.5.2 is a playable night: move with the keyboard or a touch stick, auto-attack with a stake, an unlockable censer, pyre, and ash cross, pull gems in with a magnet boon, level up, and survive a spawn curve that starts sparse, thickens, and brings a warden around the second minute and again later. Last until dawn at ten minutes. The hunter and the ground are PixelLab pixel art. Weapons, impacts, and gems are CC0 sprites from OpenGameArt, listed in [assets/CREDITS.md](assets/CREDITS.md).
 
 This is an original prototype. It is not affiliated with poncle or Vampire Survivors.
 
@@ -60,7 +60,7 @@ Not in this port: the browser hook `window.__game`, pausing when a browser tab i
 
 ## Tests
 
-Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.5.1. How to run it is in [qa/README.md](qa/README.md).
+Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.5.2. How to run it is in [qa/README.md](qa/README.md).
 
 ```bash
 npm install
@@ -70,7 +70,7 @@ npm test
 
 ## How to play
 
-1. Choose **Begin the night** (or press Enter).
+1. Choose **Begin the night** (or press Enter) and pick a hunter. **Enter** confirms. **Rise again** repeats that hunter; **C** or **Choose another** returns to the cards.
 2. Move with **WASD** or the **arrow keys**. On a phone or other coarse pointer, a stick sits on the left; drag it to move. Keys win if you press them while the stick is held. The stake aims and fires on its own at the nearest foe.
 3. Enemies walk in from off-screen and chase you. The first half-minute is shamblers only. Bats arrive after about 30 seconds, brutes after about 75. Contact hurts. You get a short invulnerability blink after each hit.
 4. Fallen enemies drop gems. Nearby gems pull in immediately (pull radius 110 until you take a magnet). Gems left behind start homing after a short delay so a long kite still pays off. Picking them up grants XP. **Grave Magnet** widens that pull in steps of 42, up to 320 (110, 152, 194, 236, 278, 320). A faint ring shows the new reach. The pickup bite itself stays 22.
@@ -181,3 +181,13 @@ Not in this build yet:
 - Gamepad
 - Meta progression, accounts, or save data beyond the mute flag
 - Recorded audio samples; cues are still synthesized. The warden is still drawn in code
+
+## v0.5.2 notes for Engineer and QA
+
+Stacks on the v0.5.1 night. Two hunters, chosen before the run.
+
+- `js/characters.js` holds the table. `hunter` is the current body (100 HP, speed 168, stake 12, every 0.56s, pierce 0). `warden_hunter` displays as **The Stakeman** (130 HP, speed 150, stake 16, every 0.68s, pierce 1). The stake is the same weapon. Sharpened Stake, Hasty Ritual (floor 0.25s), and Fleet Foot still multiply the live stat, so they scale from whichever base you brought in.
+- Art for the Stakeman loads from `assets/characters/stakeman/` (`player_sheet.png` or `sheet.png`, plus JSON) in the hunter sheet layout: 80×80 cells, eight facings, six walk frames. If that image is missing, the hunter sheet is drawn darker and the run still starts.
+- The title's **Begin the night**, **Enter**, and **Space** open the select screen. The night does not spawn there. Cards sit side by side, each looping a south walk, with a one-line identity and HP / speed / damage / fire bars. **Left** / **Right** or **A** / **D** or a click moves the highlight (1.1× ease-out, pale glow, a soft tick). **Enter**, **Space**, or a click on the highlighted card confirms: a short white flash, then the run.
+- **Rise again**, **Enter**, and **R** restart the last hunter. **C** or **Choose another** on the fallen or dawn sheet returns to select. The id is `localStorage` key `nightfall.character`. A missing or unknown value is `hunter`.
+- `window.__begin(characterId)` is the single start used by those buttons and keys.

@@ -1,8 +1,10 @@
 /** Boots Nightfall and binds the menu, level-up, and restart keys. */
 
 import { loadArt } from "./art.js";
+import { readCharacterId, writeCharacterId } from "./characters.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
+import { createSelect } from "./select.js";
 import { UI } from "./ui.js";
 
 const canvas = document.getElementById("game");
@@ -19,18 +21,33 @@ game.setArt(art);
 // older tileset if that image failed), sprites.enemies (bat, shambler, brute),
 // weaponSummary() (stake, censer, pyre, cross,
 // magnet, elite, threat), applyUpgrade(id), toggleMute().
+// window.__begin(characterId) starts a run. Missing or unknown ids use the hunter.
 window.__game = game;
 ui.setMuted(game.audio.muted);
 
-function begin() {
+function begin(characterId) {
+  const id = writeCharacterId(characterId || readCharacterId());
   game.audio.unlock();
-  game.start();
+  game.start(id);
   canvas.focus();
 }
 
-document.getElementById("btn-start").addEventListener("click", begin);
-document.getElementById("btn-restart").addEventListener("click", begin);
-document.getElementById("btn-dawn").addEventListener("click", begin);
+function openSelect() {
+  game.audio.unlock();
+  game.openSelect();
+}
+
+const select = createSelect(game, begin);
+game.select = select;
+
+window.__begin = begin;
+
+document.getElementById("btn-start").addEventListener("click", openSelect);
+document.getElementById("btn-confirm").addEventListener("click", () => select.confirm());
+document.getElementById("btn-restart").addEventListener("click", () => begin(readCharacterId()));
+document.getElementById("btn-dawn").addEventListener("click", () => begin(readCharacterId()));
+document.getElementById("btn-reselect").addEventListener("click", openSelect);
+document.getElementById("btn-reselect-dawn").addEventListener("click", openSelect);
 document.getElementById("btn-mute").addEventListener("click", () => game.toggleMute());
 
 window.addEventListener("keydown", (event) => {
@@ -47,14 +64,31 @@ window.addEventListener("keydown", (event) => {
   }
   if (game.state === "menu" && (event.code === "Enter" || event.code === "Space")) {
     event.preventDefault();
-    begin();
+    openSelect();
+  } else if (game.state === "select" && (event.code === "ArrowLeft" || event.code === "KeyA")) {
+    event.preventDefault();
+    game.input.down.delete(event.code);
+    select.move(-1);
+  } else if (game.state === "select" && (event.code === "ArrowRight" || event.code === "KeyD")) {
+    event.preventDefault();
+    game.input.down.delete(event.code);
+    select.move(1);
+  } else if (game.state === "select" && (event.code === "Enter" || event.code === "Space")) {
+    event.preventDefault();
+    select.confirm();
   } else if (game.state === "levelup" && /^Digit[1-3]$/.test(event.code)) {
     game.chooseUpgrade(Number(event.code.slice(5)) - 1);
+  } else if (game.state === "gameover" && event.code === "KeyC") {
+    event.preventDefault();
+    openSelect();
   } else if (game.state === "gameover" && (event.code === "Enter" || event.code === "KeyR")) {
-    begin();
+    begin(readCharacterId());
+  } else if (game.state === "victory" && event.code === "KeyC") {
+    event.preventDefault();
+    openSelect();
   } else if (game.state === "victory" && event.code === "Enter") {
     event.preventDefault();
-    begin();
+    begin(readCharacterId());
   }
 });
 

@@ -1,5 +1,6 @@
 /** Survivor stats. Weapons fire from Game; this owns movement, XP, and weapons. */
 
+import { characterById } from "./characters.js";
 import { AshCross } from "./cross.js";
 import { Censer } from "./censer.js";
 import { Pyre } from "./pyre.js";
@@ -54,23 +55,25 @@ export function xpRequiredFor(level) {
 }
 
 export class Player {
-  constructor(x, y) {
+  constructor(x, y, character) {
+    const stats = characterById(character?.id || character);
     this.x = x;
     this.y = y;
     this.radius = 14;
-    this.speed = 168;
-    this.maxHp = 100;
-    this.hp = 100;
+    this.characterId = stats.id;
+    this.speed = stats.speed;
+    this.maxHp = stats.maxHp;
+    this.hp = stats.maxHp;
     this.level = 1;
     this.xp = 0;
     this.xpToNext = xpRequiredFor(1);
-    this.damage = 12;
-    this.attackInterval = 0.56;
+    this.damage = stats.damage;
+    this.attackInterval = stats.attackInterval;
     this.attackTimer = 0;
     this.projectileSpeed = 520;
     this.projectileLife = 1.05;
     this.projectileCount = 1;
-    this.pierce = 0;
+    this.pierce = stats.pierce;
     this.magnetRadius = MAGNET_BASE;
     this.magnetStacks = 0;
     this.pickupRadius = 22;
@@ -86,9 +89,20 @@ export class Player {
     this.cross = new AshCross();
   }
 
-  attachArt(art) {
-    this.art = art && art.playerImage ? art : null;
-    const name = this.art?.rows?.[this.facingRow];
+  attachArt(library) {
+    const sheet = library?.characters?.[this.characterId] || library?.characters?.hunter;
+    if (!sheet?.image) {
+      this.art = null;
+      return;
+    }
+    this.art = {
+      playerImage: sheet.image,
+      frameWidth: sheet.frameWidth,
+      frameHeight: sheet.frameHeight,
+      rows: sheet.rows,
+      walkFrames: sheet.walkFrames,
+    };
+    const name = this.art.rows?.[this.facingRow];
     if (name) this.facing = name;
   }
 
@@ -143,8 +157,12 @@ export class Player {
     if (this.hp <= 0) ctx.globalAlpha = 0.45;
     else if (this.invuln > 0) ctx.globalAlpha = 0.45 + 0.4 * Math.sin(time * 30);
 
+    const cell = 68;
     const scale = SPRITE_DRAW / frameW;
-    const footY = (FIGURE_FOOT - FIGURE_CY) * scale;
+    const figureCx = FIGURE_CX * (frameW / cell);
+    const figureCy = FIGURE_CY * (frameH / cell);
+    const figureFoot = FIGURE_FOOT * (frameH / cell);
+    const footY = (figureFoot - figureCy) * scale;
     const shadow = ctx.createRadialGradient(0, footY, 2, 0, footY, 24);
     shadow.addColorStop(0, "rgba(0, 0, 0, 0.55)");
     shadow.addColorStop(1, "rgba(0, 0, 0, 0)");
@@ -160,8 +178,8 @@ export class Player {
       this.facingRow * frameH,
       frameW,
       frameH,
-      -FIGURE_CX * scale,
-      -FIGURE_CY * scale,
+      -figureCx * scale,
+      -figureCy * scale,
       SPRITE_DRAW,
       SPRITE_DRAW * (frameH / frameW),
     );

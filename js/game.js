@@ -17,6 +17,7 @@ import {
   CROSS_RANGE_STEP,
   AshBolt,
 } from "./cross.js";
+import { characterById } from "./characters.js";
 import { bindEnemyArt, Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
 import { MAGNET_MAX, MAGNET_STEP, Player } from "./player.js";
@@ -511,6 +512,8 @@ export class Game {
     this.fps = 0;
     this.fpsFrames = 0;
     this.fpsWindowStart = null;
+    this.characterId = null;
+    this.select = null;
     this.resetWorld();
     this.state = "menu";
   }
@@ -531,7 +534,7 @@ export class Game {
   }
 
   resetWorld() {
-    this.player = new Player(0, 0);
+    this.player = new Player(0, 0, characterById(this.characterId));
     if (this.art) this.player.attachArt(this.art);
     this.enemies = [];
     this.projectiles = [];
@@ -588,12 +591,21 @@ export class Game {
     this.canvas.style.height = `${this.viewH}px`;
   }
 
-  start() {
+  /** A run. `characterId` missing or unknown resolves to the hunter. */
+  start(characterId) {
+    this.characterId = characterById(characterId ?? this.characterId).id;
     this.resetWorld();
     this.state = "playing";
     for (let i = 0; i < 4; i += 1) this.spawnAround("shambler");
     this.ui.setMode("playing");
     this.ui.updateHUD(this);
+  }
+
+  /** Character cards. The night does not advance until a choice confirms. */
+  openSelect() {
+    this.state = "select";
+    this.ui.setMode("select");
+    this.select?.open();
   }
 
   frame(ts) {
@@ -608,6 +620,7 @@ export class Game {
     this.sampleFps(ts);
     this.input.setStickContext(this.state === "playing");
     if (this.state === "playing") this.update(dt);
+    else if (this.state === "select") this.select?.paint(this.anim);
     this.draw();
     if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length);
     if (this.state === "playing" || this.state === "levelup") this.ui.updateHUD(this);

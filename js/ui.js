@@ -26,6 +26,7 @@ export class UI {
     this.omen = document.getElementById("omen");
     this.muteButton = document.getElementById("btn-mute");
     this.startOverlay = document.getElementById("overlay-start");
+    this.selectOverlay = document.getElementById("overlay-select");
     this.levelOverlay = document.getElementById("overlay-level");
     this.overOverlay = document.getElementById("overlay-over");
     this.winOverlay = document.getElementById("overlay-win");
@@ -36,9 +37,10 @@ export class UI {
   }
 
   setMode(mode) {
-    const sheet = mode === "menu" || mode === "gameover" || mode === "victory";
+    const sheet = mode === "menu" || mode === "select" || mode === "gameover" || mode === "victory";
     this.hud.classList.toggle("hidden", sheet);
     this.startOverlay.classList.toggle("hidden", mode !== "menu");
+    if (this.selectOverlay) this.selectOverlay.classList.toggle("hidden", mode !== "select");
     this.levelOverlay.classList.toggle("hidden", mode !== "levelup");
     this.overOverlay.classList.toggle("hidden", mode !== "gameover");
     if (this.winOverlay) this.winOverlay.classList.toggle("hidden", mode !== "victory");

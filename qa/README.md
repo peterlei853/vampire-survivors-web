@@ -1,6 +1,6 @@
 # Nightfall smoke suite
 
-Automated smoke checks for the v0.5.1 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.1). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the enemy sheets and graveyard tileset. One covers the v0.5.1 tuning pass. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
+Automated smoke checks for the v0.5.2 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.2). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the enemy sheets and graveyard tileset. One covers the v0.5.1 tuning pass. Four cover character select. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
 
 Assertions go through the live handle in `js/main.js`:
 
@@ -23,7 +23,7 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | Spec | Check |
 | --- | --- |
 | loads the menu with no console errors | Page boots, `state === "menu"`, no `pageerror` or console error, stake owned, censer locked, threat 0 |
-| starts a run from the menu | **Begin the night** enters `playing`, HUD shows, four foes are in, XP to leave level 1 is 40, opening spawn interval stays between 1s and 2s |
+| starts a run from the menu | **Begin the night** opens select; confirming enters `playing`, HUD shows, four foes are in, XP to leave level 1 is 40, opening spawn interval stays between 1s and 2s |
 | holding a direction moves the player | `KeyD` is in `input.down` and the player moves more than 20px |
 | the stake auto-attacks | A projectile appears on its own and `weaponSummary().stake` is armed |
 | forced level-up offers Warding Censer | The boon overlay includes Censer; choosing it sets `censer.owned` and the HUD chip |
@@ -37,6 +37,10 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | touch stick | On desktop the stick stays hidden. A mouse pointer does nothing. A touch drag sets `input.touch` and shows `#stick`. Holding **W** replaces that vector |
 | player sprite and facing | `sprites.player` is a loaded 476×544 sheet. Holding **D** sets `player.facing` to `east` and it stays after release. Holding **A** sets `west` and it stays after release |
 | enemy sheets and graveyard tileset | Bat 68×544, shambler 92×736, and brute 104×832 sheets load, and the floor image is `tileset_graveyard.png` at 128×128 (`tilesetKind === "graveyard"`). A filled crowd still reports FPS on **F3** |
+| begin(characterId) | `__begin("hunter")` and `__begin("warden_hunter")` set that body's HP, speed, stake, interval, and pierce. Sharpened Stake, Hasty Ritual, and Fleet Foot scale from that base |
+| saved character fallback | `nightfall.character` of `nope`, or a missing key, starts the hunter |
+| Enter opens select | **Enter** on the title shows the cards and does not spawn. **Right** then **Enter** starts The Stakeman |
+| restart keeps the character | **Rise again** after The Stakeman repeats those stats. **C** on the fallen sheet returns to select and the clock stays put |
 
 ## Run
 

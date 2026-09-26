@@ -25,12 +25,14 @@ async function bootMenu(page) {
 
 async function beginNight(page) {
   await page.getByRole("button", { name: "Begin the night" }).click();
+  await page.waitForFunction(() => window.__game.state === "select");
+  await page.keyboard.press("Enter");
   await page.waitForFunction(() => window.__game.state === "playing");
 }
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.5\.1/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.5\.2/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -550,7 +552,7 @@ async function expectFreshNight(page) {
 
 test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async ({ page }) => {
   const problems = await bootMenu(page);
-  await expect(page.locator(".version")).toHaveText("v0.5.1");
+  await expect(page.locator(".version")).toHaveText("v0.5.2");
   await expect(page.locator("#perf")).toBeHidden();
 
   await page.keyboard.press("F3");
@@ -817,4 +819,187 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
   await page.waitForFunction(() => window.__game.state === "playing");
   await expectFreshNight(page);
   expect(problems, problems.join("\n")).toEqual([]);
+});
+
+test("begin(characterId) applies each hunter, and boons scale from that base", async ({ page }) => {
+  await bootMenu(page);
+
+  const hunter = await page.evaluate(() => {
+    window.__begin("hunter");
+    const game = window.__game;
+    const base = {
+      id: game.player.characterId,
+      hp: game.player.maxHp,
+      speed: game.player.speed,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      pierce: game.player.pierce,
+    };
+    game.applyUpgrade("damage");
+    game.applyUpgrade("haste");
+    game.applyUpgrade("speed");
+    return {
+      base,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      speed: game.player.speed,
+    };
+  });
+  expect(hunter.base).toEqual({
+    id: "hunter",
+    hp: 100,
+    speed: 168,
+    damage: 12,
+    interval: 0.56,
+    pierce: 0,
+  });
+  expect(hunter.damage).toBe(Math.round(12 * 1.2));
+  expect(hunter.interval).toBeCloseTo(Math.max(0.25, 0.56 * 0.88), 5);
+  expect(hunter.speed).toBe(Math.min(400, Math.round(168 * 1.1)));
+
+  const stakeman = await page.evaluate(() => {
+    window.__begin("warden_hunter");
+    const game = window.__game;
+    const base = {
+      id: game.player.characterId,
+      hp: game.player.maxHp,
+      speed: game.player.speed,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      pierce: game.player.pierce,
+      state: game.state,
+      stored: localStorage.getItem("nightfall.character"),
+    };
+    game.applyUpgrade("damage");
+    game.applyUpgrade("haste");
+    game.applyUpgrade("speed");
+    game.applyUpgrade("pierce");
+    const sheet = game.art.characters.warden_hunter;
+    return {
+      base,
+      damage: game.player.damage,
+      interval: game.player.attackInterval,
+      speed: game.player.speed,
+      pierce: game.player.pierce,
+      art: {
+        ready: Boolean(sheet && sheet.image),
+        fallback: Boolean(sheet && sheet.fallback),
+        frameWidth: sheet ? sheet.frameWidth : 0,
+        walkFrames: sheet ? sheet.walkFrames : 0,
+      },
+    };
+  });
+  expect(stakeman.base).toEqual({
+    id: "warden_hunter",
+    hp: 130,
+    speed: 150,
+    damage: 16,
+    interval: 0.68,
+    pierce: 1,
+    state: "playing",
+    stored: "warden_hunter",
+  });
+  expect(stakeman.damage).toBe(Math.round(16 * 1.2));
+  expect(stakeman.interval).toBeCloseTo(Math.max(0.25, 0.68 * 0.88), 5);
+  expect(stakeman.speed).toBe(Math.min(400, Math.round(150 * 1.1)));
+  expect(stakeman.pierce).toBe(2);
+  expect(stakeman.art.ready).toBe(true);
+  if (stakeman.art.fallback) {
+    expect(stakeman.art.frameWidth).toBe(68);
+  } else {
+    expect(stakeman.art.frameWidth).toBe(80);
+    expect(stakeman.art.walkFrames).toBe(6);
+  }
+});
+
+test("a missing or invalid saved character falls back to the hunter", async ({ page }) => {
+  await bootMenu(page);
+  await page.evaluate(() => localStorage.setItem("nightfall.character", "nope"));
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.__game.state === "menu");
+  await page.evaluate(() => window.__begin());
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => window.__game.player.characterId)).toBe("hunter");
+  expect(await page.evaluate(() => localStorage.getItem("nightfall.character"))).toBe("hunter");
+
+  await page.evaluate(() => localStorage.removeItem("nightfall.character"));
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.__game.state === "menu");
+  await page.evaluate(() => window.__begin());
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => ({
+    id: window.__game.player.characterId,
+    hp: window.__game.player.maxHp,
+    stored: localStorage.getItem("nightfall.character"),
+  }))).toEqual({ id: "hunter", hp: 100, stored: "hunter" });
+});
+
+test("Enter on the title opens character select and does not start a run", async ({ page }) => {
+  await bootMenu(page);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__game.state === "select");
+  await expect(page.locator("#overlay-select")).toBeVisible();
+  await expect(page.locator("#overlay-start")).toBeHidden();
+  await expect(page.locator("#hud")).toBeHidden();
+  await expect(page.locator(".char-card.selected")).toHaveAttribute("data-character", "hunter");
+
+  const before = await page.evaluate(() => ({
+    time: window.__game.time,
+    enemies: window.__game.enemies.length,
+  }));
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => ({
+    state: window.__game.state,
+    time: window.__game.time,
+    enemies: window.__game.enemies.length,
+  }));
+  expect(after.state).toBe("select");
+  expect(after.time).toBe(before.time);
+  expect(after.enemies).toBe(0);
+
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".char-card.selected")).toHaveAttribute("data-character", "warden_hunter");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => window.__game.player.characterId)).toBe("warden_hunter");
+});
+
+test("Rise again keeps the last character, and C returns to select", async ({ page }) => {
+  await bootMenu(page);
+  await page.evaluate(() => window.__begin("warden_hunter"));
+  await page.waitForFunction(() => window.__game.state === "playing");
+
+  await page.evaluate(() => {
+    window.__game.player.hp = 0;
+  });
+  await page.waitForFunction(() => window.__game.state === "gameover");
+  await page.getByRole("button", { name: "Rise again" }).click();
+  await page.waitForFunction(() => window.__game.state === "playing");
+  expect(await page.evaluate(() => ({
+    id: window.__game.player.characterId,
+    hp: window.__game.player.maxHp,
+    damage: window.__game.player.damage,
+    pierce: window.__game.player.pierce,
+    stored: localStorage.getItem("nightfall.character"),
+  }))).toEqual({
+    id: "warden_hunter",
+    hp: 130,
+    damage: 16,
+    pierce: 1,
+    stored: "warden_hunter",
+  });
+
+  await page.evaluate(() => {
+    window.__game.player.hp = 0;
+  });
+  await page.waitForFunction(() => window.__game.state === "gameover");
+  await page.keyboard.press("c");
+  await page.waitForFunction(() => window.__game.state === "select");
+  await expect(page.locator("#overlay-select")).toBeVisible();
+  const parked = await page.evaluate(() => window.__game.time);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => ({
+    state: window.__game.state,
+    time: window.__game.time,
+  }))).toEqual({ state: "select", time: parked });
 });

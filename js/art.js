@@ -1,9 +1,7 @@
 /** PixelLab sheet and Wang tiles, plus the CC0 weapon sprites. Missing images leave the shape-drawn fallback in place. */
 
+import { CHARACTER_ORDER, CHARACTERS } from "./characters.js";
 import { loadFx } from "./fxart.js";
-
-const PLAYER_URL = new URL("../assets/player_sheet.png", import.meta.url);
-const PLAYER_META_URL = new URL("../assets/player_sheet.json", import.meta.url);
 const TILESET_URL = new URL("../assets/tileset.png", import.meta.url);
 const TILESET_META_URL = new URL("../assets/tileset_metadata.json", import.meta.url);
 const GRAVEYARD_URL = new URL("../assets/tiles/tileset_graveyard.png", import.meta.url);
@@ -249,6 +247,83 @@ async function loadEnemySheet(kind) {
   };
 }
 
+const FACING_ROWS = [
+  "south",
+  "south-east",
+  "east",
+  "north-east",
+  "north",
+  "north-west",
+  "west",
+  "south-west",
+];
+
+function sheetFrom(image, meta, defaults) {
+  if (!image) return null;
+  const rows = Array.isArray(meta?.rows) && meta.rows.length === 8 ? meta.rows : defaults.rows;
+  return {
+    image,
+    frameWidth: meta?.frameWidth || defaults.frameWidth,
+    frameHeight: meta?.frameHeight || defaults.frameHeight,
+    rows,
+    walkFrames: meta?.walkFrames || defaults.walkFrames,
+    fallback: false,
+  };
+}
+
+function assetUrl(path) {
+  return new URL(`../${path}`, import.meta.url);
+}
+
+/** Try each file pair on the character row. The first image that loads wins. */
+async function loadCharacterArt(character) {
+  const spec = character.sheet;
+  if (!spec) return null;
+  const defaults = {
+    frameWidth: spec.frameWidth || 68,
+    frameHeight: spec.frameHeight || 68,
+    rows: FACING_ROWS,
+    walkFrames: spec.walkFrames || 6,
+  };
+  for (const file of spec.files || []) {
+    const [image, meta] = await Promise.all([
+      loadImage(assetUrl(file.image)),
+      loadJson(assetUrl(file.meta)),
+    ]);
+    const sheet = sheetFrom(image, meta, defaults);
+    if (sheet) return sheet;
+  }
+  return null;
+}
+
+async function loadCharacterSheets() {
+  const entries = await Promise.all(CHARACTER_ORDER.map(async (id) => [
+    id,
+    await loadCharacterArt(CHARACTERS[id]),
+  ]));
+  const sheets = Object.fromEntries(entries);
+  for (const id of CHARACTER_ORDER) {
+    const tint = CHARACTERS[id].tintFallback;
+    if (!sheets[id] && tint && sheets[tint]) sheets[id] = darkenSheet(sheets[tint]);
+  }
+  return sheets;
+}
+
+/** Opaque pixels of the hunter sheet, pulled toward night so a missing body still reads as someone else. */
+function darkenSheet(sheet) {
+  const source = sheet.image;
+  const canvas = document.createElement("canvas");
+  canvas.width = source.naturalWidth || source.width;
+  canvas.height = source.naturalHeight || source.height;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(source, 0, 0);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = "rgba(10, 8, 16, 0.55)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return { ...sheet, image: canvas, fallback: true };
+}
+
 async function loadDecor() {
   const loaded = await Promise.all(DECOR_SPECS.map(async (spec) => {
     const image = await loadImage(new URL(`../assets/decor/${spec.file}`, import.meta.url));
@@ -259,8 +334,7 @@ async function loadDecor() {
 
 export async function loadArt() {
   const [
-    playerImage,
-    playerMeta,
+    characters,
     graveyardImage,
     graveyardMeta,
     classicImage,
@@ -269,8 +343,7 @@ export async function loadArt() {
     decor,
     fx,
   ] = await Promise.all([
-    loadImage(PLAYER_URL),
-    loadJson(PLAYER_META_URL),
+    loadCharacterSheets(),
     loadImage(GRAVEYARD_URL),
     loadJson(GRAVEYARD_META_URL),
     loadImage(TILESET_URL),
@@ -280,9 +353,9 @@ export async function loadArt() {
     loadFx(),
   ]);
 
-  const rows = Array.isArray(playerMeta?.rows) && playerMeta.rows.length === 8
-    ? playerMeta.rows
-    : ["south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west"];
+  const hunterSheet = characters.hunter;
+  const playerImage = hunterSheet?.image || null;
+  const rows = hunterSheet?.rows || FACING_ROWS;
 
   let tilesetImage = null;
   let tilesetKind = null;
@@ -303,10 +376,11 @@ export async function loadArt() {
     tilesetImage,
     tilesetKind,
     enemies: Object.fromEntries(enemies),
-    frameWidth: playerMeta?.frameWidth || 68,
-    frameHeight: playerMeta?.frameHeight || 68,
+    frameWidth: hunterSheet?.frameWidth || 68,
+    frameHeight: hunterSheet?.frameHeight || 68,
     rows,
-    walkFrames: playerMeta?.walkFrames || 6,
+    walkFrames: hunterSheet?.walkFrames || 6,
+    characters,
     ground,
     fx,
   };

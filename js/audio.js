@@ -87,6 +87,8 @@ export class AudioBus {
         tone(ctx, this.master, now + 0.18, 784, 1046, 0.16, "triangle", 0.07);
       } else if (kind === "death") {
         tone(ctx, this.master, now, 196, 52, 0.55, "sawtooth", 0.06);
+      } else if (kind === "tick") {
+        tone(ctx, this.master, now, 920, 640, 0.045, "sine", 0.035);
       }
     } catch {
       /* blocked or half-closed audio never breaks the night */
