@@ -1,6 +1,6 @@
 # vampire-survivors-web
 
-Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.5.0 is a playable night: move with the keyboard or a touch stick, auto-attack with a stake, an unlockable censer, pyre, and ash cross, pull gems in with a magnet boon, level up, and survive a spawn curve that starts sparse, thickens, and brings a warden around the second minute. The hunter and the ground are PixelLab pixel art. Weapons, impacts, and gems are CC0 sprites from OpenGameArt, listed in [assets/CREDITS.md](assets/CREDITS.md).
+Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.5.1 is a playable night: move with the keyboard or a touch stick, auto-attack with a stake, an unlockable censer, pyre, and ash cross, pull gems in with a magnet boon, level up, and survive a spawn curve that starts sparse, thickens, and brings a warden around the second minute and again later. Last until dawn at ten minutes. The hunter and the ground are PixelLab pixel art. Weapons, impacts, and gems are CC0 sprites from OpenGameArt, listed in [assets/CREDITS.md](assets/CREDITS.md).
 
 This is an original prototype. It is not affiliated with poncle or Vampire Survivors.
 
@@ -60,7 +60,7 @@ Not in this port: the browser hook `window.__game`, pausing when a browser tab i
 
 ## Tests
 
-Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.5.0. How to run it is in [qa/README.md](qa/README.md).
+Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.5.1. How to run it is in [qa/README.md](qa/README.md).
 
 ```bash
 npm install
@@ -73,11 +73,11 @@ npm test
 1. Choose **Begin the night** (or press Enter).
 2. Move with **WASD** or the **arrow keys**. On a phone or other coarse pointer, a stick sits on the left; drag it to move. Keys win if you press them while the stick is held. The stake aims and fires on its own at the nearest foe.
 3. Enemies walk in from off-screen and chase you. The first half-minute is shamblers only. Bats arrive after about 30 seconds, brutes after about 75. Contact hurts. You get a short invulnerability blink after each hit.
-4. Fallen enemies drop gems. Nearby gems pull in immediately (pull radius 175 until you take a magnet). Gems left behind start homing after a short delay so a long kite still pays off. Picking them up grants XP. **Grave Magnet** widens that pull in steps of 48, up to 320 (175, 223, 271, 319, 320). A faint ring shows the new reach. The pickup bite itself stays 22.
+4. Fallen enemies drop gems. Nearby gems pull in immediately (pull radius 110 until you take a magnet). Gems left behind start homing after a short delay so a long kite still pays off. Picking them up grants XP. **Grave Magnet** widens that pull in steps of 42, up to 320 (110, 152, 194, 236, 278, 320). A faint ring shows the new reach. The pickup bite itself stays 22.
 5. Filling the XP bar levels you up and pauses the night. Pick one of three boons (click, or press **1**, **2**, or **3**). A level also restores a little health. **Warding Censer**, **Cinder Pyre**, and **Ash Cross** each stay on the table until you take that weapon. Later boons add censers, flasks, crosses, heat, or reach. Stake boons still sharpen the bolts. Grave Magnet can show up in a free slot.
 6. The pyre throws a flask at the nearest foe. It arcs, then leaves a pool that ticks damage on anyone still standing in it. It does not aim like the stake or sweep like the censer. The ash cross is a fourth weapon: it flies out along the nearest foe and cuts again on the way back.
-7. Once the night reaches 90 seconds, the **Warden** is coming. A quiet run gets the warning at 100 seconds. A run with 80 kills can get it as soon as 90. A red sigil marks the spot for 2.4 seconds, then the warden steps out of it. It is slow, it is labeled, and every few seconds it paints a circle where you are standing. The circle does not follow you. Leave it before it bursts. Killing the warden drops a large gem and a ring of smaller ones. It spawns once per night.
-8. Spawn rate, batch size, and the crowd cap rise with time, plus a smaller share of your kills. The warden is not culled when the crowd is full and is not dropped for running far away. At 0 HP the run ends. **Rise again**, **Enter**, or **R** starts a new night.
+7. Once the night reaches 90 seconds, the **Warden** is coming. A quiet run gets the warning at 100 seconds. A run with 80 kills can get it as soon as 90. A red sigil marks the spot for 2.4 seconds, then the warden steps out of it. It is slow, it is labeled, and every few seconds it paints a circle where you are standing. The circle does not follow you. Leave it before it bursts. Killing the warden drops a large gem and a ring of smaller ones. It returns on a fixed clock (220s, 340s, 460s, …). Each later body has 1.5× the previous generation's base HP, on top of the night's HP scale. **F3** toggles an FPS and enemy-count readout (off until you press it).
+8. Spawn rate, batch size, and the crowd cap rise with time, plus a smaller share of your kills. The crowd ceiling is 140 until 4:00, 180 until 6:00, and 220 after. A spawn batch is capped at 5, then 6, then 7 on that same clock. At 4:00 a line of 30 bats enters from one edge, at 6:00 a ring of 12 brutes closes in, and at 8:00 a mixed wave of 40 arrives. Those waves are added on top of whoever is already here. They count toward the crowd cap afterward, and ordinary spawns wait until the total is under the ceiling again. If a normal foe is removed because the crowd is full, its XP is added to the nearest gem (or dropped, if the ground is empty). The warden is not culled when the crowd is full and is not dropped for running far away. At 0 HP the run ends. Surviving to 10:00 shows **Dawn breaks** once you are in play again (a level-up card finishes first) and pauses the night, even if a warden is still standing. **Enter** starts another. **Rise again**, **Enter**, or **R** also starts a new night after you fall.
 9. **M** or the **Sound on** button mutes hit, gem, level-up, and death cues. The choice is remembered in `localStorage` when the browser allows it. If audio is blocked, the night keeps going with no sound and no error.
 
 HUD, from the top: kills and version, survival timer, omen line, weapon chips, level. Along the bottom: HP, then XP. The censer, pyre, and cross chips stay dim until you wake them. The magnet chip always shows the current pull radius and lights up after the first Grave Magnet. Mute sits under the level. The touch stick is hidden on a mouse until a finger is actually down.
@@ -87,17 +87,17 @@ HUD, from the top: kills and version, survival timer, omen line, weapon chips, l
 - `index.html` — shell, HUD, level-up, and game-over UI
 - `css/style.css` — layout and theme
 - `js/main.js` — boot, art preload, and overlay shortcuts
-- `js/art.js` — PixelLab sprite sheet and graveyard tiles
+- `js/art.js` — PixelLab hunter, enemy sheets, graveyard tiles, and baked decorations
 - `js/fxart.js` — CC0 weapon, impact, and gem sprites
 - `js/game.js` — loop, spawn curve, combat, warden timing, camera, upgrade choices
 - `js/player.js` — movement, stats, XP curve, facing, and the walk cycle
-- `assets/` — `player_sheet.png` and `tileset.png` (PixelLab), plus their JSON metadata
+- `assets/` — PixelLab hunter (`player_sheet.png`), fallback floor (`tileset.png`), enemy sheets (`assets/enemies/`), graveyard floor (`assets/tiles/`), and decorations (`assets/decor/`)
 - `assets/oga/` — CC0 weapon, impact, and gem sprites. Credits are in [assets/CREDITS.md](assets/CREDITS.md)
 - `js/censer.js` — orbiting warding censer
 - `js/pyre.js` — cinder pyre flasks and burning pools
 - `js/cross.js` — ash cross and its returning bolts
 - `js/audio.js` — Web Audio cues and mute
-- `js/enemy.js` — shamblers, bats, brutes, and the warden
+- `js/enemy.js` — shamblers, bats, brutes, and the warden. The first three draw from PixelLab sheets; the warden stays shape-drawn
 - `js/projectile.js` — auto-aimed stakes
 - `js/gem.js` — XP pickups and magnet pull
 - `js/ui.js` — HUD and overlays
@@ -160,9 +160,24 @@ New in this build:
 - Images are preloaded in `js/main.js` before `window.__game` is published and before the frame loop starts. `window.__game.sprites.player` is the loaded sheet (or null).
 - **Weapon sprites.** The stake, warding censer, cinder pyre (flask and pool), and ash cross, plus hit puffs and XP gems, are drawn from CC0 pixel art in `assets/oga/`. Bolts and the pyre flask rotate to their travel direction. The cross spins. On screen the stake and flask are about 28–32px, the ash cross about 32px of artwork inside a slightly larger cell, the censer orb 24px, and gems 14–16px. Hitboxes and damage are unchanged. If a sprite fails to load, that effect falls back to the old shape. Sources, authors, and the CC0 license are in [assets/CREDITS.md](assets/CREDITS.md).
 
+## v0.5.1 notes for Engineer and QA
+
+Tuning pass on the v0.5.0 night, plus PixelLab foes, a graveyard floor, and baked decorations. Weapons and the touch stick are unchanged.
+
+- Crowd ceiling in `maxEnemiesFor` is still `min(ceiling, round(12 + threat * 14))`. The ceiling is 140 before 4:00, 180 before 6:00, and 220 after. `spawnCountFor` uses the same clock for its batch cap: 5, then 6, then 7.
+- Enemy HP scale in `Enemy` is `1 + max(0, t - 30) / 220`. Speed and damage scales are unchanged. Bat chase speed is capped at 200 (absolute; the hunter's base speed is 168, so two Fleet Foot picks can outrun a bat).
+- One-shot swarms: 30 bats along one screen edge at 4:00, 12 brutes in a ring at 6:00, 40 mixed foes (shambler, bat, brute) at 8:00. The wave does not evict anyone to make room. The new bodies count toward the cap, and `spawnBatch` waits until `enemies.length` is under `maxEnemies()` again. They are marked `swarm` so a cap cull will not pick them.
+- The first warden keeps the v0.5.0 window (`eliteDue`: not before 90s; at 90s if kills are at least 80; otherwise 100s). Later warnings are due at 220s, 340s, 460s, … (`100 + appearance * 120`). Base HP is multiplied by `1.5` per generation (`1`, `1.5`, `2.25`, …) and then by the usual HP scale. One warden fight at a time; if the previous body is still up at the next timestamp, the next warning starts as soon as it falls.
+- Surviving to 600s opens **Dawn breaks** (`state === "victory"`) only while `state` is `playing` and no level-up is waiting. If cards are open, the win runs as soon as the last card closes. A living warden does not block it. The simulation does not advance behind that sheet. **Enter** or **Rise again** calls the same restart as a fallen run.
+- Sharpened Stake sets `damage = round(damage * 1.2)`. Hasty Ritual cannot push the attack interval below 0.25s. Grave Magnet starts at 110 and adds 42 up to 320.
+- `cullOneForCap` merges the removed foe's XP into the nearest gem, or drops a gem on that spot. `trimGems` folds overflow gem XP into the gem closest to the hunter, so a later gem cap does not throw that value away.
+- **F3** toggles `#perf` (FPS and live enemy count). It stays off until pressed, including across a restart.
+- Bats, shamblers, and brutes draw from `assets/enemies/{bat,shambler,brute}_sheet.png` (8 facing rows, nearest-neighbor). `bodyBox` width is the hit diameter and its centre sits on the collision point. A short vertical bob stands in for the single walk frame. Damage flashes a cached white copy of the sheet. If a sheet fails to load, that type keeps the old circle. The warden is still drawn in code.
+- The floor prefers `assets/tiles/tileset_graveyard.png`, sliced by each tile's `bounding_box`, through the same cached 8×8 chunks. `assets/tileset.png` is the fallback. About one tile in forty bakes a decoration from `assets/decor/` into that chunk (gravestone, candle, and shrub more often than bones or a buried skull). Decorations do not collide.
+
 Not in this build yet:
 
 - Chests, evolutions, obstacles, or biomes
 - Gamepad
 - Meta progression, accounts, or save data beyond the mute flag
-- Recorded audio samples; cues are still synthesized. Enemies are still drawn in code
+- Recorded audio samples; cues are still synthesized. The warden is still drawn in code

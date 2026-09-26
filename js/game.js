@@ -17,7 +17,7 @@ import {
   CROSS_RANGE_STEP,
   AshBolt,
 } from "./cross.js";
-import { Enemy } from "./enemy.js";
+import { bindEnemyArt, Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
 import { MAGNET_MAX, MAGNET_STEP, Player } from "./player.js";
 import { Projectile } from "./projectile.js";
@@ -35,11 +35,26 @@ import {
 export const ELITE_MIN_TIME = 90;
 /** Quiet runs meet the warden here, still inside the 90–120s window. */
 export const ELITE_TIME = 100;
-/** A kill-heavy run can meet it as soon as the window opens. */
+/** A kill-heavy run can meet the first warden as soon as the window opens. */
 export const ELITE_KILLS = 80;
 export const ELITE_WARN = 2.4;
+/** Later wardens are on a fixed clock: 220, 340, 460, … (100 + n×120). */
+export const ELITE_INTERVAL = 120;
+/** Each later warden multiplies base HP by this, then the night's time scale. */
+export const WARDEN_HP_MULT = 1.5;
+/** Surviving this long ends the night. */
+export const DAWN_TIME = 600;
+const HASTE_FLOOR = 0.25;
+const CAP_AT_4 = 4 * 60;
+const CAP_AT_6 = 6 * 60;
 
-export function eliteDue(time, kills) {
+/**
+ * First warden still uses the v0.5.0 window (90s at 80 kills, otherwise 100s).
+ * Appearance 1, 2, 3… are due at 220, 340, 460… regardless of kills.
+ */
+export function eliteDue(time, kills, appearance = 0) {
+  const n = Math.max(0, appearance);
+  if (n > 0) return time >= ELITE_TIME + n * ELITE_INTERVAL;
   if (time < ELITE_MIN_TIME) return false;
   return time >= ELITE_TIME || kills >= ELITE_KILLS;
 }
@@ -50,23 +65,24 @@ const UPGRADES = [
     name: "Sharpened Stake",
     blurb: "Each bolt bites deeper.",
     detail(player) {
-      return `Damage ${player.damage} → ${player.damage + 5}`;
+      const next = Math.round(player.damage * 1.2);
+      return `Damage ${player.damage} → ${next}`;
     },
     apply(player) {
-      player.damage += 5;
+      player.damage = Math.round(player.damage * 1.2);
     },
   },
   {
     id: "haste",
     name: "Hasty Ritual",
     blurb: "The stake flies more often.",
-    maxed: (player) => player.attackInterval <= 0.16 + 1e-6,
+    maxed: (player) => player.attackInterval <= HASTE_FLOOR + 1e-6,
     detail(player) {
-      const next = Math.max(0.16, player.attackInterval * 0.88);
+      const next = Math.max(HASTE_FLOOR, player.attackInterval * 0.88);
       return `Attack every ${player.attackInterval.toFixed(2)}s → ${next.toFixed(2)}s`;
     },
     apply(player) {
-      player.attackInterval = Math.max(0.16, player.attackInterval * 0.88);
+      player.attackInterval = Math.max(HASTE_FLOOR, player.attackInterval * 0.88);
     },
   },
   {
@@ -385,12 +401,24 @@ export function spawnIntervalFor(time, kills) {
   return Math.max(0.32, 1.7 / (1 + nightThreat(time, kills) * 0.5));
 }
 
+export function spawnBatchCap(time) {
+  if (time < CAP_AT_4) return 5;
+  if (time < CAP_AT_6) return 6;
+  return 7;
+}
+
 export function spawnCountFor(time, kills) {
-  return Math.min(5, 1 + Math.floor(nightThreat(time, kills) / 1.5));
+  return Math.min(spawnBatchCap(time), 1 + Math.floor(nightThreat(time, kills) / 1.5));
+}
+
+export function enemyCapCeiling(time) {
+  if (time < CAP_AT_4) return 140;
+  if (time < CAP_AT_6) return 180;
+  return 220;
 }
 
 export function maxEnemiesFor(time, kills) {
-  return Math.min(140, Math.round(12 + nightThreat(time, kills) * 14));
+  return Math.min(enemyCapCeiling(time), Math.round(12 + nightThreat(time, kills) * 14));
 }
 
 function hash01(ix, iy) {
@@ -468,13 +496,21 @@ export class Game {
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.audio = new AudioBus();
     this.art = null;
-    this.sprites = { player: null, tileset: null };
+    this.sprites = {
+      player: null,
+      tileset: null,
+      enemies: { bat: null, shambler: null, brute: null },
+    };
     this.dpr = 1;
     this.viewW = 800;
     this.viewH = 600;
     this.anim = 0;
     this.lastDt = 0;
     this.lastTs = null;
+    this.showPerf = false;
+    this.fps = 0;
+    this.fpsFrames = 0;
+    this.fpsWindowStart = null;
     this.resetWorld();
     this.state = "menu";
   }
@@ -484,6 +520,12 @@ export class Game {
     this.art = art;
     this.sprites.player = art?.playerImage || null;
     this.sprites.tileset = art?.tilesetImage || null;
+    this.sprites.enemies = {
+      bat: art?.enemies?.bat?.image || null,
+      shambler: art?.enemies?.shambler?.image || null,
+      brute: art?.enemies?.brute?.image || null,
+    };
+    bindEnemyArt(art?.enemies);
     applyFx(art?.fx);
     if (this.player) this.player.attachArt(art);
   }
@@ -509,8 +551,26 @@ export class Game {
     this.hurtFlash = 0;
     this.eliteState = "idle";
     this.eliteWarning = null;
+    this.wardenAppearances = 0;
+    this.swarmsSeen = new Set();
     this.omen = "";
     this.omenTimer = 0;
+  }
+
+  togglePerf() {
+    this.showPerf = !this.showPerf;
+    this.ui.setPerfVisible(this.showPerf);
+    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length);
+  }
+
+  sampleFps(ts) {
+    if (this.fpsWindowStart == null) this.fpsWindowStart = ts;
+    this.fpsFrames += 1;
+    const span = ts - this.fpsWindowStart;
+    if (span < 250) return;
+    this.fps = (this.fpsFrames * 1000) / span;
+    this.fpsFrames = 0;
+    this.fpsWindowStart = ts;
   }
 
   toggleMute() {
@@ -545,15 +605,18 @@ export class Game {
     if (document.hidden) dt = 0;
     this.lastDt = dt;
     this.anim += dt;
+    this.sampleFps(ts);
     this.input.setStickContext(this.state === "playing");
     if (this.state === "playing") this.update(dt);
     this.draw();
+    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length);
     if (this.state === "playing" || this.state === "levelup") this.ui.updateHUD(this);
     requestAnimationFrame((next) => this.frame(next));
   }
 
   update(dt) {
     this.time += dt;
+    this.maybeSwarm();
     this.maybeElite();
     this.updateElite(dt);
     this.player.update(dt, this.input.axis());
@@ -600,32 +663,117 @@ export class Game {
   }
 
   spawnBatch() {
-    const count = spawnCountFor(this.time, this.kills);
-    for (let i = 0; i < count; i += 1) {
-      this.makeRoomForSpawn();
-      this.spawnAround(this.pickType());
-    }
+    const cap = this.maxEnemies();
+    if (this.enemies.length >= cap) return;
+    const count = Math.min(spawnCountFor(this.time, this.kills), cap - this.enemies.length);
+    for (let i = 0; i < count; i += 1) this.spawnAround(this.pickType());
   }
 
-  makeRoomForSpawn() {
-    if (this.enemies.length < this.maxEnemies()) return;
+  /**
+   * Drop the farthest ordinary foe so a spawn can take its slot.
+   * Warden and swarm bodies are kept. Their XP is merged into a gem.
+   */
+  cullOneForCap() {
     let farIndex = -1;
     let farDist = -1;
     const px = this.player.x;
     const py = this.player.y;
     for (let i = 0; i < this.enemies.length; i += 1) {
       const enemy = this.enemies[i];
-      if (enemy.type === "warden") continue;
+      if (enemy.type === "warden" || enemy.swarm) continue;
       const dist = (enemy.x - px) ** 2 + (enemy.y - py) ** 2;
       if (dist > farDist) {
         farDist = dist;
         farIndex = i;
       }
     }
-    if (farIndex >= 0) this.enemies.splice(farIndex, 1);
+    if (farIndex < 0) return false;
+    const [removed] = this.enemies.splice(farIndex, 1);
+    this.keepXp(removed);
+    return true;
   }
 
-  spawnAround(typeName) {
+  keepXp(enemy) {
+    const xp = enemy.xp || 0;
+    if (xp <= 0) return;
+    let nearest = null;
+    let best = Infinity;
+    for (const gem of this.gems) {
+      const dist = (gem.x - enemy.x) ** 2 + (gem.y - enemy.y) ** 2;
+      if (dist < best) {
+        best = dist;
+        nearest = gem;
+      }
+    }
+    if (nearest) nearest.addValue(xp);
+    else this.gems.push(new Gem(enemy.x, enemy.y, xp));
+  }
+
+  maybeSwarm() {
+    if (this.time >= CAP_AT_4 && !this.swarmsSeen.has("bats")) {
+      this.swarmsSeen.add("bats");
+      this.spawnEdgeLine("bat", 30);
+    }
+    if (this.time >= CAP_AT_6 && !this.swarmsSeen.has("brutes")) {
+      this.swarmsSeen.add("brutes");
+      this.spawnRing("brute", 12);
+    }
+    if (this.time >= 8 * 60 && !this.swarmsSeen.has("mixed")) {
+      this.swarmsSeen.add("mixed");
+      this.spawnMixed(40);
+    }
+  }
+
+  spawnEdgeLine(typeName, count) {
+    const side = Math.floor(Math.random() * 4);
+    const halfW = this.viewW / 2;
+    const halfH = this.viewH / 2;
+    const pad = 72;
+    const span = side < 2 ? this.viewW : this.viewH;
+    const step = Math.min(28, (span * 0.85) / count);
+    for (let i = 0; i < count; i += 1) {
+      const along = (i - (count - 1) / 2) * step;
+      let x = this.player.x;
+      let y = this.player.y;
+      if (side === 0) {
+        x += along;
+        y -= halfH + pad;
+      } else if (side === 1) {
+        x += along;
+        y += halfH + pad;
+      } else if (side === 2) {
+        x -= halfW + pad;
+        y += along;
+      } else {
+        x += halfW + pad;
+        y += along;
+      }
+      this.pushEnemy(typeName, x, y, true);
+    }
+  }
+
+  spawnRing(typeName, count) {
+    const radius = Math.max(160, Math.min(this.viewW, this.viewH) * 0.36);
+    for (let i = 0; i < count; i += 1) {
+      const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
+      this.pushEnemy(
+        typeName,
+        this.player.x + Math.cos(angle) * radius,
+        this.player.y + Math.sin(angle) * radius,
+        true,
+      );
+    }
+  }
+
+  spawnMixed(count) {
+    const types = ["shambler", "bat", "brute"];
+    for (let i = 0; i < count; i += 1) {
+      const spot = this.offscreenPoint();
+      this.pushEnemy(types[i % types.length], spot.x, spot.y, true);
+    }
+  }
+
+  offscreenPoint() {
     const halfW = this.viewW / 2;
     const halfH = this.viewH / 2;
     const pad = 48 + Math.random() * 80;
@@ -636,7 +784,19 @@ export class Game {
     else if (side === 1) y = this.player.y + halfH + pad;
     else if (side === 2) x = this.player.x - halfW - pad;
     else x = this.player.x + halfW + pad;
-    this.enemies.push(new Enemy(typeName, x, y, this.time));
+    return { x, y };
+  }
+
+  spawnAround(typeName) {
+    const spot = this.offscreenPoint();
+    this.pushEnemy(typeName, spot.x, spot.y, false);
+  }
+
+  pushEnemy(typeName, x, y, swarm) {
+    const enemy = new Enemy(typeName, x, y, this.time);
+    if (swarm) enemy.swarm = true;
+    this.enemies.push(enemy);
+    return enemy;
   }
 
   pruneFarEnemies() {
@@ -835,8 +995,8 @@ export class Game {
   }
 
   maybeElite() {
-    if (this.eliteState !== "idle") return;
-    if (!eliteDue(this.time, this.kills)) return;
+    if (this.eliteState === "warning" || this.eliteState === "alive") return;
+    if (!eliteDue(this.time, this.kills, this.wardenAppearances)) return;
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.min(this.viewW, this.viewH) * 0.36;
     this.eliteWarning = {
@@ -865,7 +1025,9 @@ export class Game {
   spawnWarden() {
     const spot = this.eliteWarning;
     if (!spot || this.eliteState !== "warning") return;
-    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time));
+    const generation = this.wardenAppearances;
+    this.wardenAppearances += 1;
+    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time, WARDEN_HP_MULT ** generation));
     this.eliteState = "alive";
     this.omen = "The Warden is here";
     this.omenTimer = 2.2;
@@ -982,6 +1144,8 @@ export class Game {
       const db = (b.x - px) ** 2 + (b.y - py) ** 2;
       return da - db;
     });
+    const keeper = this.gems[0];
+    for (let i = cap; i < this.gems.length; i += 1) keeper.addValue(this.gems[i].value);
     this.gems.length = cap;
   }
 
@@ -1082,19 +1246,42 @@ export class Game {
   }
 
   finishFrame() {
+    if (this.state !== "playing") return;
     if (this.player.hp <= 0) {
       this.enterGameOver();
       return;
     }
-    if (this.pendingLevels > 0 && this.state === "playing") this.openLevelUp();
+    if (this.pendingLevels > 0) {
+      this.openLevelUp();
+      return;
+    }
+    if (this.time >= DAWN_TIME) this.enterVictory();
+  }
+
+  /** Back to the night. Dawn is checked here, after any open level-up cards. */
+  resumePlay() {
+    this.state = "playing";
+    this.ui.setMode("playing");
+    if (this.player.hp > 0 && this.time >= DAWN_TIME) this.enterVictory();
+  }
+
+  enterVictory() {
+    if (this.state === "victory") return;
+    this.state = "victory";
+    this.pendingLevels = 0;
+    this.currentChoices = [];
+    this.ui.showDawn({
+      time: this.time,
+      kills: this.kills,
+      level: this.player.level,
+    });
   }
 
   openLevelUp() {
     this.currentChoices = rollUpgrades(this.player, 3);
     if (this.currentChoices.length === 0) {
       this.pendingLevels = 0;
-      this.state = "playing";
-      this.ui.setMode("playing");
+      this.resumePlay();
       return;
     }
     this.state = "levelup";
@@ -1113,8 +1300,7 @@ export class Game {
       this.openLevelUp();
       return;
     }
-    this.state = "playing";
-    this.ui.setMode("playing");
+    this.resumePlay();
   }
 
   enterGameOver() {

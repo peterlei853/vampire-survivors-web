@@ -28,15 +28,32 @@ export class UI {
     this.startOverlay = document.getElementById("overlay-start");
     this.levelOverlay = document.getElementById("overlay-level");
     this.overOverlay = document.getElementById("overlay-over");
+    this.winOverlay = document.getElementById("overlay-win");
+    this.winSummary = document.getElementById("win-summary");
+    this.perf = document.getElementById("perf");
     this.choices = document.getElementById("choices");
     this.summary = document.getElementById("summary");
   }
 
   setMode(mode) {
-    this.hud.classList.toggle("hidden", mode === "menu" || mode === "gameover");
+    const sheet = mode === "menu" || mode === "gameover" || mode === "victory";
+    this.hud.classList.toggle("hidden", sheet);
     this.startOverlay.classList.toggle("hidden", mode !== "menu");
     this.levelOverlay.classList.toggle("hidden", mode !== "levelup");
     this.overOverlay.classList.toggle("hidden", mode !== "gameover");
+    if (this.winOverlay) this.winOverlay.classList.toggle("hidden", mode !== "victory");
+  }
+
+  setPerfVisible(on) {
+    if (!this.perf) return;
+    this.perf.classList.toggle("hidden", !on);
+    this.perf.setAttribute("aria-hidden", on ? "false" : "true");
+  }
+
+  setPerf(fps, enemies) {
+    if (!this.perf) return;
+    const shown = Number.isFinite(fps) ? Math.round(fps) : 0;
+    this.perf.textContent = `FPS ${shown} · Enemies ${enemies}`;
   }
 
   updateHUD(game) {
@@ -147,5 +164,23 @@ export class UI {
       this.summary.append(term, desc);
     }
     this.setMode("gameover");
+  }
+
+  showDawn(stats) {
+    if (!this.winSummary) return;
+    this.winSummary.replaceChildren();
+    const rows = [
+      ["Survived", formatTime(stats.time)],
+      ["Kills", String(stats.kills)],
+      ["Level", String(stats.level)],
+    ];
+    for (const [label, value] of rows) {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const desc = document.createElement("dd");
+      desc.textContent = value;
+      this.winSummary.append(term, desc);
+    }
+    this.setMode("victory");
   }
 }
