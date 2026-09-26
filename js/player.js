@@ -1,5 +1,6 @@
 /** Survivor stats. Weapons fire from Game; this owns movement, XP, and weapons. */
 
+import { Dagger, Scythe, starterStats, Tome, Torch, Whip } from "./armory.js";
 import { characterById } from "./characters.js";
 import { AshCross } from "./cross.js";
 import { Censer } from "./censer.js";
@@ -67,13 +68,21 @@ export class Player {
     this.level = 1;
     this.xp = 0;
     this.xpToNext = xpRequiredFor(1);
-    this.damage = stats.damage;
-    this.attackInterval = stats.attackInterval;
+    const kit = starterStats(stats.starter || "stake");
+    this.weaponId = kit.id;
+    this.damage = kit.damage;
+    this.attackInterval = kit.interval;
     this.attackTimer = 0;
-    this.projectileSpeed = 520;
-    this.projectileLife = 1.05;
-    this.projectileCount = 1;
-    this.pierce = stats.pierce;
+    this.projectileSpeed = kit.speed;
+    this.projectileLife = kit.life;
+    this.projectileCount = kit.count;
+    this.pierce = kit.pierce;
+    this.damageRanks = 0;
+    this.vigorRanks = 0;
+    this.pact = 1;
+    this.pactStacks = 0;
+    this.moveAim = 0;
+    this.faceSign = 1;
     this.magnetRadius = MAGNET_BASE;
     this.magnetStacks = 0;
     this.pickupRadius = 22;
@@ -87,6 +96,11 @@ export class Player {
     this.censer = new Censer();
     this.pyre = new Pyre();
     this.cross = new AshCross();
+    this.dagger = new Dagger();
+    this.whip = new Whip();
+    this.scythe = new Scythe();
+    this.torch = new Torch();
+    this.tome = new Tome();
   }
 
   attachArt(library) {
@@ -112,10 +126,13 @@ export class Player {
       this.x += axis.x * this.speed * dt;
       this.y += axis.y * this.speed * dt;
       this.aim = Math.atan2(axis.y, axis.x);
+      this.moveAim = this.aim;
       if (!this.moving) this.walkTime = 0;
       this.walkTime += dt;
       this.facingRow = facingIndex(axis.x, axis.y);
       this.facing = this.art?.rows?.[this.facingRow] || FACINGS[this.facingRow];
+      if (this.facingRow === 1 || this.facingRow === 2 || this.facingRow === 3) this.faceSign = 1;
+      else if (this.facingRow === 5 || this.facingRow === 6 || this.facingRow === 7) this.faceSign = -1;
     }
     this.moving = moving;
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);

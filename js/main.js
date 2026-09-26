@@ -1,18 +1,25 @@
 /** Boots Nightfall and binds the menu, level-up, and restart keys. */
 
+import { CARD_ICON_IDS } from "./armory.js";
 import { loadArt } from "./art.js";
+import { FX } from "./fx/hits.js";
 import { readCharacterId, writeCharacterId } from "./characters.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
 import { createSelect } from "./select.js";
 import { UI } from "./ui.js";
+import { CardIcons } from "./ui/levelup-cards.js";
+
+CardIcons.preload(CARD_ICON_IDS);
 
 const canvas = document.getElementById("game");
 const input = new Input();
 const ui = new UI();
 const game = new Game(canvas, input, ui);
 const art = await loadArt();
+await CardIcons.whenReady();
 game.setArt(art);
+game.iconStatus = () => CardIcons.status();
 
 // Live handle for QA scripts. Not a save file and not a secret.
 // Useful fields: state, time, kills, player (xp, level, facing, censer, pyre, cross),
@@ -28,12 +35,14 @@ ui.setMuted(game.audio.muted);
 function begin(characterId) {
   const id = writeCharacterId(characterId || readCharacterId());
   game.audio.unlock();
+  FX.unlockAudio();
   game.start(id);
   canvas.focus();
 }
 
 function openSelect() {
   game.audio.unlock();
+  FX.unlockAudio();
   game.openSelect();
 }
 

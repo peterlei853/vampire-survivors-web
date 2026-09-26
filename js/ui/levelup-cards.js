@@ -16,6 +16,26 @@ export const CardIcons = {
     for (const id of ids) { const im = new Image(); im.src = `${base}/${id}/icon.png`; imgs[id] = im; }
   },
 
+  whenReady() {
+    return Promise.all(Object.values(imgs).map((im) => {
+      if (im.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        im.addEventListener('load', () => resolve(), { once: true });
+        im.addEventListener('error', () => resolve(), { once: true });
+      });
+    }));
+  },
+
+  /** Loaded icons. `ok` means drawIcon will use the bitmap, not the placeholder circle. */
+  status() {
+    return Object.entries(imgs).map(([id, im]) => ({
+      id,
+      ok: Boolean(im.complete && im.naturalWidth > 0),
+      width: im.naturalWidth || 0,
+      height: im.naturalHeight || 0,
+    }));
+  },
+
   drawIcon(ctx, id, cx, cy, size) {
     const im = imgs[id];
     ctx.imageSmoothingEnabled = false;                      // keep pixel art crisp

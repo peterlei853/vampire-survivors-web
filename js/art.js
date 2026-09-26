@@ -2,6 +2,7 @@
 
 import { CHARACTER_ORDER, CHARACTERS } from "./characters.js";
 import { loadFx } from "./fxart.js";
+import { loadWeaponArt } from "./weaponart.js";
 const TILESET_URL = new URL("../assets/tileset.png", import.meta.url);
 const TILESET_META_URL = new URL("../assets/tileset_metadata.json", import.meta.url);
 const GRAVEYARD_URL = new URL("../assets/tiles/tileset_graveyard.png", import.meta.url);
@@ -351,6 +352,7 @@ export async function loadArt() {
     Promise.all(ENEMY_KINDS.map(async (kind) => [kind, await loadEnemySheet(kind)])),
     loadDecor(),
     loadFx(),
+    loadWeaponArt(),
   ]);
 
   const hunterSheet = characters.hunter;

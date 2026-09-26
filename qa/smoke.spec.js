@@ -32,7 +32,7 @@ async function beginNight(page) {
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.5\.2/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.7\.0/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -129,7 +129,7 @@ test("a forced level-up offers Warding Censer and taking it arms the weapon", as
   const ids = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
   expect(ids).toContain("censer");
 
-  await page.locator("#choices button", { hasText: "Warding Censer" }).click();
+  await page.locator("#choices button", { hasText: "Lantern" }).click();
   await page.waitForFunction(() => (
     window.__game.state === "playing" && window.__game.player.censer.owned
   ));
@@ -140,7 +140,7 @@ test("a forced level-up offers Warding Censer and taking it arms the weapon", as
   expect(weapons.censer.damage).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__game.player.level)).toBe(2);
   await expect(page.locator("#weapon-censer")).not.toHaveClass(/locked/);
-  await expect(page.locator("#weapon-censer")).toHaveText(/Censer ×1/);
+  await expect(page.locator("#weapon-censer")).toHaveText(/Lantern ×1/);
 });
 
 test("falling and rising again starts a fresh night", async ({ page }) => {
@@ -171,7 +171,7 @@ test("a forced level-up offers Cinder Pyre and taking it arms the weapon", async
   await bootMenu(page);
   await beginNight(page);
   await expect(page.locator("#weapon-pyre")).toHaveClass(/locked/);
-  await expect(page.locator("#weapon-pyre")).toHaveText("Pyre");
+  await expect(page.locator("#weapon-pyre")).toHaveText("Holy Water");
 
   const queued = await page.evaluate(() => {
     const game = window.__game;
@@ -188,7 +188,7 @@ test("a forced level-up offers Cinder Pyre and taking it arms the weapon", async
   const ids = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
   expect(ids).toContain("pyre");
 
-  await page.locator("#choices button", { hasText: "Cinder Pyre" }).click();
+  await page.locator("#choices button", { hasText: "Holy Water" }).click();
   await page.waitForFunction(() => (
     window.__game.state === "playing" && window.__game.player.pyre.owned
   ));
@@ -199,7 +199,7 @@ test("a forced level-up offers Cinder Pyre and taking it arms the weapon", async
   expect(weapons.pyre.damage).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__game.player.level)).toBe(2);
   await expect(page.locator("#weapon-pyre")).not.toHaveClass(/locked/);
-  await expect(page.locator("#weapon-pyre")).toHaveText(/Pyre ×1/);
+  await expect(page.locator("#weapon-pyre")).toHaveText(/Holy Water ×1/);
 });
 
 test("mute flips from the bus, the M key, and the sound button", async ({ page }) => {
@@ -304,7 +304,7 @@ test("a forced level-up offers Ash Cross and taking it arms the weapon", async (
   await bootMenu(page);
   await beginNight(page);
   await expect(page.locator("#weapon-cross")).toHaveClass(/locked/);
-  await expect(page.locator("#weapon-cross")).toHaveText("Cross");
+  await expect(page.locator("#weapon-cross")).toHaveText("Cross Boomerang");
 
   const queued = await page.evaluate(() => {
     const game = window.__game;
@@ -321,7 +321,7 @@ test("a forced level-up offers Ash Cross and taking it arms the weapon", async (
   const ids = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
   expect(ids).toContain("cross");
 
-  await page.locator("#choices button", { hasText: "Ash Cross" }).click();
+  await page.locator("#choices button", { hasText: "Cross Boomerang" }).click();
   await page.waitForFunction(() => (
     window.__game.state === "playing" && window.__game.player.cross.owned
   ));
@@ -332,7 +332,7 @@ test("a forced level-up offers Ash Cross and taking it arms the weapon", async (
   expect(weapons.cross.damage).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__game.player.level)).toBe(2);
   await expect(page.locator("#weapon-cross")).not.toHaveClass(/locked/);
-  await expect(page.locator("#weapon-cross")).toHaveText(/Cross ×1/);
+  await expect(page.locator("#weapon-cross")).toHaveText(/Cross Boomerang ×1/);
 
   await page.waitForFunction(() => window.__game.crosses.length > 0);
 });
@@ -552,7 +552,7 @@ async function expectFreshNight(page) {
 
 test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async ({ page }) => {
   const problems = await bootMenu(page);
-  await expect(page.locator(".version")).toHaveText("v0.5.2");
+  await expect(page.locator(".version")).toHaveText("v0.7.0");
   await expect(page.locator("#perf")).toBeHidden();
 
   await page.keyboard.press("F3");
@@ -1014,4 +1014,253 @@ test("Rise again keeps the last character, and C returns to select", async ({ pa
     state: window.__game.state,
     time: window.__game.time,
   }))).toEqual({ state: "select", time: parked });
+});
+
+test("each hunter's starter is equipped and the other one never is", async ({ page }) => {
+  await bootMenu(page);
+
+  const hunter = await page.evaluate(() => {
+    window.__begin("hunter");
+    const game = window.__game;
+    const summary = game.weaponSummary();
+    return {
+      id: game.player.characterId,
+      weaponId: game.player.weaponId,
+      hp: game.player.maxHp,
+      speed: game.player.speed,
+      stake: summary.stake,
+      crossbow: summary.crossbow,
+      offers: game.availableOffers(),
+    };
+  });
+  expect(hunter.id).toBe("hunter");
+  expect(hunter.weaponId).toBe("stake");
+  expect(hunter.hp).toBe(100);
+  expect(hunter.speed).toBe(168);
+  expect(hunter.stake).toMatchObject({ owned: true, damage: 12, interval: 0.56, pierce: 0, speed: 520, count: 1 });
+  expect(hunter.crossbow.owned).toBe(false);
+  expect(hunter.offers).not.toContain("crossbow");
+  expect(hunter.offers).not.toContain("stake");
+
+  const stakeman = await page.evaluate(() => {
+    window.__begin("warden_hunter");
+    const game = window.__game;
+    const summary = game.weaponSummary();
+    return {
+      id: game.player.characterId,
+      weaponId: game.player.weaponId,
+      hp: game.player.maxHp,
+      speed: game.player.speed,
+      stake: summary.stake,
+      crossbow: summary.crossbow,
+      offers: game.availableOffers(),
+    };
+  });
+  expect(stakeman.id).toBe("warden_hunter");
+  expect(stakeman.weaponId).toBe("crossbow");
+  expect(stakeman.hp).toBe(130);
+  expect(stakeman.speed).toBe(150);
+  expect(stakeman.crossbow).toMatchObject({
+    owned: true,
+    damage: 16,
+    interval: 0.68,
+    pierce: 1,
+    speed: 600,
+    count: 1,
+  });
+  expect(stakeman.stake.owned).toBe(false);
+  expect(stakeman.offers).not.toContain("stake");
+  expect(stakeman.offers).not.toContain("crossbow");
+});
+
+test("five weapons stop further unlock cards", async ({ page }) => {
+  await bootMenu(page);
+  const armed = await page.evaluate(() => {
+    window.__begin("hunter");
+    const game = window.__game;
+    game.player.hp = 5000;
+    game.player.maxHp = 5000;
+    game.player.invuln = 30;
+    const took = ["censer", "pyre", "cross", "dagger"].map((id) => game.applyUpgrade(id));
+    const blocked = ["whip", "scythe", "torch", "tome"].map((id) => game.applyUpgrade(id));
+    game.player.xpToNext = 1e12;
+    game.pendingLevels = 1;
+    return {
+      took,
+      blocked,
+      owned: game.weaponSummary().ownedCount,
+      cap: game.weaponSummary().weaponCap,
+    };
+  });
+  expect(armed.took).toEqual([true, true, true, true]);
+  expect(armed.blocked).toEqual([false, false, false, false]);
+  expect(armed.owned).toBe(5);
+  expect(armed.cap).toBe(5);
+
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  const ids = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
+  const unlocks = ["censer", "pyre", "cross", "dagger", "whip", "scythe", "torch", "tome"];
+  expect(ids.length).toBeGreaterThanOrEqual(1);
+  expect(ids.length).toBeLessThanOrEqual(3);
+  expect(ids.filter((id) => unlocks.includes(id))).toEqual([]);
+});
+
+test("a dry upgrade pool still shows fallback cards and resumes", async ({ page }) => {
+  await bootMenu(page);
+  const offers = await page.evaluate(() => {
+    window.__begin("hunter");
+    const game = window.__game;
+    game.player.hp = 1e7;
+    game.player.maxHp = 1e7;
+    game.player.invuln = 1e7;
+    game.player.xpToNext = 1e12;
+    const ids = game.upgradeIds();
+    let guard = 0;
+    let progressed = true;
+    while (progressed && guard < 40) {
+      progressed = false;
+      for (const id of ids) {
+        if (game.applyUpgrade(id)) progressed = true;
+      }
+      guard += 1;
+    }
+    game.pendingLevels = 1;
+    return { offers: game.availableOffers(), guard };
+  });
+  expect(offers.offers).toEqual([]);
+
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  const first = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
+  expect(first.length).toBeGreaterThanOrEqual(1);
+  expect(first.length).toBeLessThanOrEqual(3);
+  expect(first.some((id) => id === "bloodDraught" || id === "darkPact")).toBe(true);
+  await page.locator("#choices button").first().click();
+  await page.waitForFunction(() => window.__game.state === "playing");
+
+  await page.evaluate(() => {
+    const game = window.__game;
+    for (let i = 0; i < 12; i += 1) game.applyUpgrade("darkPact");
+    game.pendingLevels = 1;
+  });
+  await page.waitForFunction(() => window.__game.state === "levelup");
+  const second = await page.evaluate(() => window.__game.currentChoices.map((choice) => choice.id));
+  expect(second.length).toBeGreaterThanOrEqual(1);
+  expect(second.length).toBeLessThanOrEqual(3);
+  expect(second).toContain("bloodDraught");
+  expect(second).not.toContain("darkPact");
+  await page.keyboard.press("1");
+  await page.waitForFunction(() => window.__game.state === "playing");
+});
+
+test("all twelve card icons load", async ({ page }) => {
+  await bootMenu(page);
+  const icons = await page.evaluate(() => window.__game.iconStatus());
+  expect(icons.map((icon) => icon.id).sort()).toEqual([
+    "bloodDraught",
+    "censer",
+    "cross",
+    "crossbow",
+    "dagger",
+    "darkPact",
+    "pyre",
+    "scythe",
+    "stake",
+    "tome",
+    "torch",
+    "whip",
+  ]);
+  for (const icon of icons) {
+    expect(icon.ok, icon.id).toBe(true);
+    expect(icon.width, icon.id).toBe(64);
+    expect(icon.height, icon.id).toBe(64);
+  }
+});
+
+test("torch, holy water, and scythe at max stay inside the FX caps at 220 foes", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await page.evaluate(() => {
+    const game = window.__game;
+    const max = (id) => {
+      while (game.applyUpgrade(id)) { /* climb the track */ }
+    };
+    game.applyUpgrade("torch");
+    max("torch-heat");
+    max("torch-reach");
+    game.applyUpgrade("pyre");
+    max("pyre-charges");
+    max("pyre-heat");
+    max("pyre-reach");
+    game.applyUpgrade("scythe");
+    max("scythe-heat");
+    max("scythe-reach");
+    max("scythe-haste");
+    game.player.hp = 1e9;
+    game.player.maxHp = 1e9;
+    game.player.invuln = 1e9;
+    game.player.xpToNext = 1e12;
+    game.spawnTimer = 999;
+    const target = 220;
+    while (game.enemies.length < target) {
+      const left = target - game.enemies.length;
+      game.spawnEdgeLine("bat", Math.min(30, left));
+      if (game.enemies.length < target) game.spawnRing("shambler", Math.min(12, target - game.enemies.length));
+      if (game.enemies.length < target) game.spawnMixed(Math.min(40, target - game.enemies.length));
+    }
+    const list = game.enemies;
+    for (let i = 0; i < list.length; i += 1) {
+      const ring = i < 90 ? 36 + (i % 8) * 14 : 190 + (i % 12) * 22;
+      const angle = i * 2.399963;
+      list[i].x = game.player.x + Math.cos(angle) * ring;
+      list[i].y = game.player.y + Math.sin(angle) * ring;
+      list[i].hp = 1e9;
+      list[i].xp = 0;
+    }
+    game.player.torch.timer = 0;
+    game.player.scythe.timer = 0;
+    game.player.pyre.timer = 0;
+    game.player.attackTimer = 10;
+  });
+
+  await page.evaluate(() => {
+    window.__fxPeak = { particles: 0, numbers: 0, voices: 0 };
+    const mark = () => {
+      const stats = window.__game.fxStats();
+      const peak = window.__fxPeak;
+      peak.particles = Math.max(peak.particles, stats.particles);
+      peak.numbers = Math.max(peak.numbers, stats.numbers);
+      peak.voices = Math.max(peak.voices, stats.voices);
+      if (window.__fxWatch) requestAnimationFrame(mark);
+    };
+    window.__fxWatch = true;
+    requestAnimationFrame(mark);
+  });
+  await page.keyboard.press("F3");
+  await page.waitForTimeout(1800);
+  const perf = await page.evaluate(() => {
+    window.__fxWatch = false;
+    return {
+      fps: window.__game.fps,
+      enemies: window.__game.enemies.length,
+      text: document.getElementById("perf").textContent,
+      weapons: window.__game.weaponSummary(),
+      peak: window.__fxPeak,
+    };
+  });
+  expect(perf.weapons.torch.damage).toBe(9);
+  expect(perf.weapons.torch.radius).toBe(110);
+  expect(perf.weapons.scythe.damage).toBe(40);
+  expect(perf.weapons.scythe.radius).toBe(160);
+  expect(perf.weapons.scythe.interval).toBeLessThanOrEqual(1.6 + 1e-6);
+  expect(perf.weapons.pyre.charges).toBe(3);
+  expect(perf.enemies).toBeGreaterThanOrEqual(180);
+  expect(perf.text).toContain("FPS");
+  expect(perf.text).toContain("Particles");
+  expect(perf.text).toContain("Numbers");
+  expect(perf.peak.particles).toBeGreaterThan(0);
+  expect(perf.peak.particles).toBeLessThanOrEqual(300);
+  expect(perf.peak.numbers).toBeLessThanOrEqual(40);
+  expect(perf.peak.voices).toBeLessThanOrEqual(6);
+  expect(perf.fps).toBeGreaterThan(55);
+  console.log(`F3 area weapons: ${perf.text} (raw ${perf.fps.toFixed(1)}, enemies ${perf.enemies}, peak p${perf.peak.particles} n${perf.peak.numbers} v${perf.peak.voices})`);
 });

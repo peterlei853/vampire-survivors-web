@@ -24,18 +24,6 @@
       "facing": "none",
       "primary": true,
       "description": "top-down ring of flickering flames, transparent centre; scale to radius 60-110px"
-    },
-    {
-      "file": "fireball_extra.png",
-      "role": "projectile",
-      "frameWidth": 54,
-      "frameHeight": 32,
-      "frames": 8,
-      "fps": 12,
-      "loop": true,
-      "facing": "east",
-      "primary": false,
-      "description": "extra: orange fireball with flickering trail"
     }
   ]
 }

@@ -1,5 +1,10 @@
 /** DOM HUD, level-up cards, and the game-over sheet. */
 
+import { CardIcons } from "./ui/levelup-cards.js";
+
+const CARD_W = 220;
+const CARD_H = 268;
+
 export function formatTime(seconds) {
   const safe = Math.max(0, Math.floor(seconds));
   const mins = Math.floor(safe / 60);
@@ -22,6 +27,11 @@ export class UI {
     this.weaponCenser = document.getElementById("weapon-censer");
     this.weaponPyre = document.getElementById("weapon-pyre");
     this.weaponCross = document.getElementById("weapon-cross");
+    this.weaponDagger = document.getElementById("weapon-dagger");
+    this.weaponWhip = document.getElementById("weapon-whip");
+    this.weaponScythe = document.getElementById("weapon-scythe");
+    this.weaponTorch = document.getElementById("weapon-torch");
+    this.weaponTome = document.getElementById("weapon-tome");
     this.magnetReadout = document.getElementById("magnet");
     this.omen = document.getElementById("omen");
     this.muteButton = document.getElementById("btn-mute");
@@ -34,6 +44,9 @@ export class UI {
     this.perf = document.getElementById("perf");
     this.choices = document.getElementById("choices");
     this.summary = document.getElementById("summary");
+    this.levelViews = null;
+    this.levelT0 = 0;
+    this.levelSelected = 0;
   }
 
   setMode(mode) {
@@ -52,10 +65,12 @@ export class UI {
     this.perf.setAttribute("aria-hidden", on ? "false" : "true");
   }
 
-  setPerf(fps, enemies) {
+  setPerf(fps, enemies, fxStats) {
     if (!this.perf) return;
     const shown = Number.isFinite(fps) ? Math.round(fps) : 0;
-    this.perf.textContent = `FPS ${shown} · Enemies ${enemies}`;
+    const particles = fxStats ? fxStats.particles : 0;
+    const numbers = fxStats ? fxStats.numbers : 0;
+    this.perf.textContent = `FPS ${shown} · Enemies ${enemies} · Particles ${particles} · Numbers ${numbers}`;
   }
 
   updateHUD(game) {
@@ -70,35 +85,51 @@ export class UI {
     this.levelText.textContent = String(player.level);
     this.killsText.textContent = String(game.kills);
     this.timerText.textContent = formatTime(game.time);
-    this.weaponStake.textContent = `Stake ×${player.projectileCount}`;
+    if (player.weaponId === "crossbow") {
+      this.weaponStake.textContent = `Crossbow ×${player.projectileCount}`;
+    } else {
+      this.weaponStake.textContent = `Stake ×${player.projectileCount}`;
+    }
     if (player.censer.owned) {
-      this.weaponCenser.textContent = `Censer ×${player.censer.orbs}`;
+      this.weaponCenser.textContent = `Lantern ×${player.censer.orbs}`;
       this.weaponCenser.classList.remove("locked");
     } else {
-      this.weaponCenser.textContent = "Censer";
+      this.weaponCenser.textContent = "Lantern";
       this.weaponCenser.classList.add("locked");
     }
     if (player.pyre.owned) {
-      this.weaponPyre.textContent = `Pyre ×${player.pyre.charges}`;
+      this.weaponPyre.textContent = `Holy Water ×${player.pyre.charges}`;
       this.weaponPyre.classList.remove("locked");
     } else {
-      this.weaponPyre.textContent = "Pyre";
+      this.weaponPyre.textContent = "Holy Water";
       this.weaponPyre.classList.add("locked");
     }
     if (this.weaponCross) {
       if (player.cross.owned) {
-        this.weaponCross.textContent = `Cross ×${player.cross.count}`;
+        this.weaponCross.textContent = `Cross Boomerang ×${player.cross.count}`;
         this.weaponCross.classList.remove("locked");
       } else {
-        this.weaponCross.textContent = "Cross";
+        this.weaponCross.textContent = "Cross Boomerang";
         this.weaponCross.classList.add("locked");
       }
     }
+    this.paintOwned(this.weaponDagger, player.dagger?.owned, `Dagger ×${player.dagger?.count || 0}`);
+    this.paintOwned(this.weaponWhip, player.whip?.owned, player.whip?.both ? "Whip ×2" : "Whip ×1");
+    this.paintOwned(this.weaponScythe, player.scythe?.owned, "Scythe");
+    this.paintOwned(this.weaponTorch, player.torch?.owned, "Torch");
+    this.paintOwned(this.weaponTome, player.tome?.owned, `Tome ×${player.tome?.count || 0}`);
     if (this.magnetReadout) {
       this.magnetReadout.textContent = `Magnet ${player.magnetRadius}`;
       this.magnetReadout.classList.toggle("armed", player.magnetStacks > 0);
     }
     this.setOmen(game.omen);
+  }
+
+  paintOwned(node, owned, label) {
+    if (!node) return;
+    node.textContent = label;
+    node.classList.toggle("hidden", !owned);
+    node.classList.toggle("locked", !owned);
   }
 
   setMuted(muted) {
@@ -120,34 +151,52 @@ export class UI {
     this.omen.classList.remove("hidden");
   }
 
-  showLevelUp(player, choices, onPick) {
+  showLevelUp(player, choices, onPick, time = 0) {
     this.choices.replaceChildren();
-    choices.forEach((upgrade, index) => {
+    this.levelT0 = time;
+    this.levelSelected = 0;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.levelViews = choices.map((upgrade, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      let tone = "choice";
-      if (upgrade.family === "censer") tone = "choice choice-weapon";
-      else if (upgrade.family === "pyre") tone = "choice choice-pyre";
-      else if (upgrade.family === "cross") tone = "choice choice-cross";
-      else if (upgrade.family === "magnet") tone = "choice choice-magnet";
-      button.className = tone;
-      const key = document.createElement("span");
-      key.className = "choice-key";
-      key.textContent = String(index + 1);
+      button.className = "choice choice-canvas";
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(CARD_W * dpr);
+      canvas.height = Math.floor(CARD_H * dpr);
+      canvas.style.width = `${CARD_W}px`;
+      canvas.style.height = `${CARD_H}px`;
+      canvas.setAttribute("aria-hidden", "true");
       const name = document.createElement("span");
-      name.className = "choice-name";
+      name.className = "choice-sr";
       name.textContent = upgrade.name;
-      const blurb = document.createElement("span");
-      blurb.className = "choice-blurb";
-      blurb.textContent = upgrade.blurb;
-      const detail = document.createElement("span");
-      detail.className = "choice-detail";
-      detail.textContent = upgrade.detail(player);
-      button.append(key, name, blurb, detail);
+      button.append(canvas, name);
       button.addEventListener("click", () => onPick(index));
+      button.addEventListener("pointerenter", () => {
+        this.levelSelected = index;
+      });
       this.choices.append(button);
+      return { canvas, card: presentCard(upgrade, player, index), dpr };
     });
     this.setMode("levelup");
+    this.paintLevelCards(time);
+  }
+
+  paintLevelCards(time) {
+    if (!this.levelViews) return;
+    const t = Math.max(0, time - this.levelT0);
+    for (let index = 0; index < this.levelViews.length; index += 1) {
+      const view = this.levelViews[index];
+      const ctx = view.canvas.getContext("2d");
+      ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, CARD_W, CARD_H);
+      CardIcons.drawCard(ctx, view.card, 0, 0, CARD_W, CARD_H, index === this.levelSelected, t);
+    }
+  }
+
+  clearLevelCards() {
+    this.levelViews = null;
+    if (this.choices) this.choices.replaceChildren();
   }
 
   showGameOver(stats) {
@@ -185,4 +234,22 @@ export class UI {
     }
     this.setMode("victory");
   }
+}
+
+function presentCard(upgrade, player, index) {
+  const icon = typeof upgrade.icon === "function"
+    ? upgrade.icon(player)
+    : (upgrade.icon || upgrade.family || upgrade.id);
+  const maxLevel = upgrade.ranks || 0;
+  return {
+    id: upgrade.id,
+    weapon: icon,
+    title: upgrade.name,
+    desc: `${upgrade.blurb}\n${upgrade.detail(player)}`,
+    isNew: upgrade.kind === "unlock",
+    level: maxLevel && upgrade.level ? upgrade.level(player) : 0,
+    maxLevel,
+    index,
+    kind: upgrade.family || "boon",
+  };
 }

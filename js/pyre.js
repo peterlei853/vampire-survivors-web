@@ -1,6 +1,7 @@
-/** Cinder Pyre: flasks arc onto foes and leave a pool that keeps burning. */
+/** Holy Water: flasks arc onto foes and leave a burning pool. Internal id stays `pyre`. */
 
 import { drawStrip, fx } from "./fxart.js";
+import { drawWeapon, hasWeapon } from "./weaponart.js";
 
 export const PYRE_MAX_CHARGES = 3;
 export const PYRE_MAX_DAMAGE = 12;
@@ -74,6 +75,14 @@ export class PyreFlask {
     const t = 1 - Math.max(0, this.life) / this.max;
     const dx = this.tx - this.sx;
     const dy = (this.ty - this.sy) - Math.cos(t * Math.PI) * 26 * Math.PI;
+    if (hasWeapon("pyre", "projectile")) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.imageSmoothingEnabled = false;
+      drawWeapon(ctx, "pyre", "projectile", this.max - this.life, 0, 32, 32);
+      ctx.restore();
+      return;
+    }
     if (fx.fireball) {
       ctx.save();
       ctx.translate(this.x, this.y);
@@ -124,6 +133,16 @@ export class PyrePool {
 
   draw(ctx, time) {
     const fade = Math.max(0, this.life / this.max);
+    if (hasWeapon("pyre", "pool")) {
+      const diameter = Math.max(16, this.radius * 2);
+      ctx.save();
+      ctx.globalAlpha = 0.4 + fade * 0.6;
+      ctx.translate(this.x, this.y);
+      ctx.imageSmoothingEnabled = false;
+      drawWeapon(ctx, "pyre", "pool", time, 0, diameter, diameter * (62 / 80));
+      ctx.restore();
+      return;
+    }
     if (fx.firebomb) {
       ctx.save();
       ctx.globalAlpha = 0.35 + fade * 0.65;

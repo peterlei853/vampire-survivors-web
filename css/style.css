@@ -347,8 +347,35 @@ kbd {
 .choices {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
   margin-top: 18px;
+}
+
+.choice.choice-canvas {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  position: relative;
+}
+
+.choice.choice-canvas:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.choice-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .choice {

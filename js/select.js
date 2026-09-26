@@ -1,5 +1,6 @@
 /** Character cards. The night stays paused until confirm. */
 
+import { STARTERS } from "./armory.js";
 import { CHARACTER_ORDER, CHARACTERS, readCharacterId } from "./characters.js";
 
 const WALK_FPS = 10;
@@ -12,21 +13,26 @@ const STATS = [
   { key: "rate", label: "Rate" },
 ];
 
+function kitOf(character) {
+  return STARTERS[character.starter] || STARTERS.stake;
+}
+
 function statCaps() {
   const list = CHARACTER_ORDER.map((id) => CHARACTERS[id]);
   return {
     hp: Math.max(...list.map((c) => c.maxHp)),
     speed: Math.max(...list.map((c) => c.speed)),
-    damage: Math.max(...list.map((c) => c.damage)),
-    rate: Math.max(...list.map((c) => 1 / c.attackInterval)),
+    damage: Math.max(...list.map((c) => kitOf(c).damage)),
+    rate: Math.max(...list.map((c) => 1 / kitOf(c).interval)),
   };
 }
 
 function statRatio(character, key, caps) {
+  const kit = kitOf(character);
   if (key === "hp") return character.maxHp / caps.hp;
   if (key === "speed") return character.speed / caps.speed;
-  if (key === "damage") return character.damage / caps.damage;
-  return (1 / character.attackInterval) / caps.rate;
+  if (key === "damage") return kit.damage / caps.damage;
+  return (1 / kit.interval) / caps.rate;
 }
 
 export function createSelect(game, begin) {
@@ -61,7 +67,8 @@ export function createSelect(game, begin) {
 
     const tag = document.createElement("span");
     tag.className = "char-tag";
-    if (character.pierce > 0) tag.textContent = `Pierce ${character.pierce}`;
+    const pierce = kitOf(character).pierce;
+    if (pierce > 0) tag.textContent = `Pierce ${pierce}`;
 
     const stats = document.createElement("span");
     stats.className = "char-stats";

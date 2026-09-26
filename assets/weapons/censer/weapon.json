@@ -24,18 +24,6 @@
       "facing": "none",
       "primary": true,
       "description": "the lantern itself with flickering blue flame, for orbiting"
-    },
-    {
-      "file": "lightning_extra.png",
-      "role": "projectile",
-      "frameWidth": 48,
-      "frameHeight": 64,
-      "frames": 8,
-      "fps": 12,
-      "loop": true,
-      "facing": "none",
-      "primary": false,
-      "description": "extra: crackling blue lightning strike from above"
     }
   ]
 }

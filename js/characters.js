@@ -9,9 +9,7 @@ export const CHARACTERS = {
     blurb: "Fast, rapid stakes.",
     maxHp: 100,
     speed: 168,
-    damage: 12,
-    attackInterval: 0.56,
-    pierce: 0,
+    starter: "stake",
     artKey: "hunter",
     sheet: {
       frameWidth: 68,
@@ -25,12 +23,10 @@ export const CHARACTERS = {
   warden_hunter: {
     id: "warden_hunter",
     name: "The Stakeman",
-    blurb: "Tough, heavy piercing stakes.",
+    blurb: "Tough, heavy crossbow bolts.",
     maxHp: 130,
     speed: 150,
-    damage: 16,
-    attackInterval: 0.68,
-    pierce: 1,
+    starter: "crossbow",
     artKey: "stakeman",
     /** Same layout as the hunter. A missing file uses the hunter sheet, tinted darker. */
     tintFallback: "hunter",
