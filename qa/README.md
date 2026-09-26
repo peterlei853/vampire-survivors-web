@@ -1,6 +1,6 @@
 # Nightfall smoke suite
 
-Automated smoke checks for the v0.5.2 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.2). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the enemy sheets and graveyard tileset. One covers the v0.5.1 tuning pass. Four cover character select. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
+Automated smoke checks for the v0.6 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.6). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the enemy sheets and graveyard tileset, checked against each sheet's JSON. One covers the v0.5.1 tuning pass. Four cover character select. Three cover the brute hitbox, the Vampire Lord, and a 10:00 crowd at the 220 cap. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
 
 Assertions go through the live handle in `js/main.js`:
 

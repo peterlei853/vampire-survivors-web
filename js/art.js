@@ -8,6 +8,18 @@ const GRAVEYARD_URL = new URL("../assets/tiles/tileset_graveyard.png", import.me
 const GRAVEYARD_META_URL = new URL("../assets/tiles/tileset_graveyard.json", import.meta.url);
 
 const ENEMY_KINDS = ["bat", "shambler", "brute"];
+const LORD_PARTS = ["walk", "cast", "dash"];
+
+/**
+ * Column count from a sheet JSON. Cast and dash use `frames`; walks use
+ * `walkFrames`. A missing or non-numeric count is 1, never NaN.
+ */
+export function frameCount(meta) {
+  const raw = meta?.walkFrames ?? meta?.frames;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
+}
 
 /** Gravestone, candle, and shrub show up more often than bones or a buried skull. */
 const DECOR_SPECS = [
@@ -237,14 +249,28 @@ async function loadEnemySheet(kind) {
   const metaUrl = new URL(`../assets/enemies/${kind}_sheet.json`, import.meta.url);
   const [image, meta] = await Promise.all([loadImage(imageUrl), loadJson(metaUrl)]);
   const body = meta?.bodyBox;
+  const frameWidth = Number(meta?.frameWidth);
+  const frameHeight = Number(meta?.frameHeight);
   if (!image || !body || !(body.w > 0) || !(body.h > 0)) return null;
+  if (!Number.isFinite(frameWidth) || frameWidth <= 0) return null;
+  if (!Number.isFinite(frameHeight) || frameHeight <= 0) return null;
   return {
     image,
-    frameWidth: meta.frameWidth || image.naturalWidth,
-    frameHeight: meta.frameHeight || image.naturalHeight,
-    walkFrames: meta.walkFrames || 1,
+    frameWidth,
+    frameHeight,
+    walkFrames: frameCount(meta),
+    rows: Array.isArray(meta.rows) && meta.rows.length === 8 ? meta.rows : FACING_ROWS,
     bodyBox: { x: body.x, y: body.y, w: body.w, h: body.h },
+    animation: meta.animation || null,
   };
+}
+
+async function loadLordSheets() {
+  const entries = await Promise.all(LORD_PARTS.map(async (part) => [
+    part,
+    await loadEnemySheet(`lord_${part}`),
+  ]));
+  return Object.fromEntries(entries);
 }
 
 const FACING_ROWS = [
@@ -261,14 +287,22 @@ const FACING_ROWS = [
 function sheetFrom(image, meta, defaults) {
   if (!image) return null;
   const rows = Array.isArray(meta?.rows) && meta.rows.length === 8 ? meta.rows : defaults.rows;
-  return {
+  const frameWidth = Number(meta?.frameWidth);
+  const frameHeight = Number(meta?.frameHeight);
+  const sheet = {
     image,
-    frameWidth: meta?.frameWidth || defaults.frameWidth,
-    frameHeight: meta?.frameHeight || defaults.frameHeight,
+    frameWidth: Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : defaults.frameWidth,
+    frameHeight: Number.isFinite(frameHeight) && frameHeight > 0 ? frameHeight : defaults.frameHeight,
     rows,
-    walkFrames: meta?.walkFrames || defaults.walkFrames,
+    walkFrames: meta ? frameCount(meta) : frameCount({ walkFrames: defaults.walkFrames }),
     fallback: false,
   };
+  const body = meta?.bodyBox;
+  if (body && body.w > 0 && body.h > 0) {
+    sheet.bodyBox = { x: body.x, y: body.y, w: body.w, h: body.h };
+  }
+  if (Array.isArray(meta?.columns)) sheet.columns = meta.columns.slice();
+  return sheet;
 }
 
 function assetUrl(path) {
@@ -340,6 +374,7 @@ export async function loadArt() {
     classicImage,
     classicMeta,
     enemies,
+    lord,
     decor,
     fx,
   ] = await Promise.all([
@@ -349,6 +384,7 @@ export async function loadArt() {
     loadImage(TILESET_URL),
     loadJson(TILESET_META_URL),
     Promise.all(ENEMY_KINDS.map(async (kind) => [kind, await loadEnemySheet(kind)])),
+    loadLordSheets(),
     loadDecor(),
     loadFx(),
   ]);
@@ -375,7 +411,7 @@ export async function loadArt() {
     playerImage,
     tilesetImage,
     tilesetKind,
-    enemies: Object.fromEntries(enemies),
+    enemies: { ...Object.fromEntries(enemies), lord },
     frameWidth: hunterSheet?.frameWidth || 68,
     frameHeight: hunterSheet?.frameHeight || 68,
     rows,

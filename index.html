@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Nightfall — v0.5.2</title>
+  <title>Nightfall — v0.6</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%239e2d3a'/%3E%3Cpath d='M8 1.5l1.1 3.4H13l-2.8 2 1.1 3.4L8 8.4 4.7 10.3 5.8 6.9 3 4.9h3.9z' fill='%23efe6d6'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -14,7 +14,7 @@
 
     <div id="hud" class="hidden">
       <div class="hud-top">
-        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.5.2</span></div>
+        <div class="kills"><span><span id="kills">0</span> kills</span><span class="version">v0.6</span></div>
         <div class="hud-clock">
           <div id="timer" class="timer">00:00</div>
           <div id="omen" class="omen hidden" role="status"></div>
@@ -42,7 +42,7 @@
 
     <div id="overlay-start" class="overlay">
       <div class="panel">
-        <p class="eyebrow">Survivors prototype · v0.5.2</p>
+        <p class="eyebrow">Survivors prototype · v0.6</p>
         <h1>Nightfall</h1>
         <p class="lede">Move through the dark. The stake aims itself. Level up to wake a censer, a pyre, or an ash cross, and to pull gems from farther away. A warden marks the ground before it strikes, and it comes back. Last until dawn.</p>
         <button id="btn-start" type="button">Begin the night</button>
@@ -51,7 +51,7 @@
           <li>The stake fires on its own. A censer, a pyre, or an ash cross can join it</li>
           <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> pick a level-up</li>
           <li><kbd>M</kbd> mutes the night</li>
-          <li><kbd>F3</kbd> toggles FPS and the enemy count</li>
+          <li><kbd>F3</kbd> toggles FPS, the enemy count, and the Vampire Lord's HP</li>
           <li><kbd>Enter</kbd> chooses who walks, and restarts after you fall or dawn breaks. <kbd>C</kbd> picks again</li>
         </ul>
       </div>
@@ -97,6 +97,13 @@
         <button id="btn-reselect-dawn" class="ghost" type="button">Choose another</button>
         <p class="hint"><kbd>Enter</kbd> rises again · <kbd>C</kbd> chooses another</p>
       </div>
+    </div>
+
+    <div id="lord-banner" class="lord-banner hidden" role="status" aria-hidden="true">THE VAMPIRE LORD APPROACHES</div>
+    <div id="boss-bar" class="boss-bar hidden" aria-hidden="true">
+      <span class="boss-name">Vampire Lord</span>
+      <span class="boss-track"><span id="boss-fill" class="boss-fill"></span></span>
+      <span id="boss-hp" class="boss-hp">5000</span>
     </div>
 
     <div id="perf" class="perf hidden" aria-hidden="true">FPS 0 · Enemies 0</div>

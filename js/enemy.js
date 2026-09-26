@@ -18,8 +18,8 @@ function tintedSheet(image) {
   const cached = flashCopies.get(image);
   if (cached) return cached;
   const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
   const ctx = canvas.getContext("2d");
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(image, 0, 0);
@@ -35,7 +35,26 @@ export const ENEMY_TYPES = {
   bat: { hp: 10, speed: 196, radius: 10, color: "#8a56b0", damage: 7, xp: 2 },
   brute: { hp: 84, speed: 48, radius: 20, color: "#7a3034", damage: 16, xp: 5 },
   warden: { hp: 280, speed: 56, radius: 26, color: "#8e243f", damage: 14, xp: 0 },
+  lord: { hp: 5000, speed: 55, radius: 34, color: "#6a1028", damage: 20, xp: 0 },
 };
+
+/** Painted body height. bodyBox only scales and anchors the sprite; radius stays on the type. */
+export const BODY_HEIGHT = {
+  bat: 32,
+  shambler: 44,
+  brute: 58,
+  lord: 96,
+};
+
+export const LORD_HP = 5000;
+export const LORD_SPEED = 55;
+export const LORD_DAMAGE = 20;
+export const LORD_RADIUS = 34;
+export const LORD_DASH_DAMAGE = 25;
+export const LORD_DASH_DISTANCE = 400;
+export const LORD_DASH_TELEGRAPH = 1;
+export const LORD_MARK_RADIUS = 86;
+export const LORD_MARK_WINDUP = 1.05;
 
 /** Absolute chase-speed cap, tuned against base move speed 168, not current speed. */
 export const BAT_SPEED_CAP = 200;
@@ -51,28 +70,68 @@ export class Enemy {
     this.x = x;
     this.y = y;
     this.radius = base.radius;
-    this.speed = typeName === "bat"
-      ? Math.min(BAT_SPEED_CAP, base.speed * speedScale)
-      : base.speed * speedScale;
+    const flat = typeName === "lord";
+    this.speed = flat
+      ? LORD_SPEED
+      : typeName === "bat"
+        ? Math.min(BAT_SPEED_CAP, base.speed * speedScale)
+        : base.speed * speedScale;
     const mult = hpMultiplier > 0 ? hpMultiplier : 1;
-    this.maxHp = Math.max(1, Math.round(base.hp * hpScale * mult));
+    this.maxHp = flat ? LORD_HP : Math.max(1, Math.round(base.hp * hpScale * mult));
     this.hp = this.maxHp;
-    this.damage = Math.max(1, Math.round(base.damage * dmgScale));
+    this.damage = flat ? LORD_DAMAGE : Math.max(1, Math.round(base.damage * dmgScale));
     this.xp = base.xp;
     this.color = base.color;
     this.hitFlash = 0;
     this.censerCd = 0;
     this.bob = Math.random() * Math.PI * 2;
+    this.animTime = 0;
+    this.animPhase = Math.random();
     this.facingRow = 0;
+    this.sheetAnim = "walk";
+    this.knockbackImmune = flat;
+    this.dashing = false;
     this.phase = "chase";
     this.specialTimer = typeName === "warden" ? 1.5 : 0;
     this.windup = 0;
     this.windupMax = 1.05;
     this.mark = null;
     this.pulse = null;
+    this.pulses = [];
+    if (flat) {
+      this.lordPhase = 1;
+      this.markTimer = 6;
+      this.batTimer = 12;
+      this.dashTimer = 8;
+      this.cast = null;
+      this.dash = null;
+      this.marks = [];
+    }
+  }
+
+  /** Walk cycle rate. Stays in the 8–10 fps band and picks up slightly with speed. */
+  walkFps() {
+    const speed = Number.isFinite(this.speed) ? this.speed : 0;
+    return 8 + 2 * Math.min(1, Math.max(0, speed) / 200);
+  }
+
+  markInterval() {
+    return this.lordPhase === 2 ? 4 : 6;
+  }
+
+  batRingCount() {
+    return this.lordPhase === 2 ? 12 : 8;
+  }
+
+  contactDamage() {
+    return this.dashing ? LORD_DASH_DAMAGE : this.damage;
   }
 
   update(dt, player) {
+    if (this.type === "lord") {
+      this.stepLordMotion(dt, player);
+      return;
+    }
     let speed = this.speed;
     if (this.type === "warden") {
       this.stepWarden(dt, player);
@@ -84,13 +143,186 @@ export class Enemy {
     if (dx !== 0 || dy !== 0) this.facingRow = facingIndex(dx, dy);
     this.x += (dx / dist) * speed * dt;
     this.y += (dy / dist) * speed * dt;
-    this.bob += dt * (this.type === "bat" ? 7 : 3);
+    this.animTime += dt;
     if (this.type === "bat") {
+      this.bob += dt * 7;
       this.x += (-dy / dist) * Math.sin(this.bob) * 36 * dt;
       this.y += (dx / dist) * Math.sin(this.bob) * 36 * dt;
     }
     if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
     if (this.censerCd > 0) this.censerCd = Math.max(0, this.censerCd - dt);
+  }
+
+  /**
+   * Scripted by Game.updateLord via advanceLord. This only moves the body:
+   * hold still on the dash line, slide along it once the dash starts, and
+   * chase slowly while a cast or a planted mark is winding up.
+   */
+  stepLordMotion(dt, player) {
+    this.animTime += dt;
+    if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
+    if (this.dashing) return;
+    if (this.dash?.phase === "line") {
+      this.facingRow = facingIndex(this.dash.dx, this.dash.dy);
+      return;
+    }
+    let speed = this.speed;
+    const casting = Boolean(this.cast);
+    const marking = this.marks?.some((mark) => mark.burst <= 0 && mark.windup > 0);
+    if (casting || marking) speed *= 0.22;
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    if (dx !== 0 || dy !== 0) this.facingRow = facingIndex(dx, dy);
+    this.x += (dx / dist) * speed * dt;
+    this.y += (dy / dist) * speed * dt;
+  }
+
+  /** Marks, bat calls, and the dash. `game` spawns the bats so they join the cap. */
+  advanceLord(dt, game) {
+    this.lordPhase = this.hp <= this.maxHp * 0.5 ? 2 : 1;
+    if (this.lordPhase === 2 && this.markTimer > this.markInterval()) {
+      this.markTimer = this.markInterval();
+    }
+    this.advanceMarks(dt);
+    if (this.dash) {
+      this.advanceDash(dt);
+      return;
+    }
+    if (this.cast) {
+      this.advanceCast(dt, game);
+      return;
+    }
+    this.sheetAnim = "walk";
+    this.dashing = false;
+    this.markTimer -= dt;
+    this.batTimer -= dt;
+    if (this.lordPhase === 1) this.dashTimer -= dt;
+    if (this.markTimer <= 0) {
+      this.markTimer += this.markInterval();
+      this.beginCast("marks");
+      return;
+    }
+    if (this.batTimer <= 0) {
+      this.batTimer += 12;
+      this.beginCast("bats");
+      return;
+    }
+    if (this.lordPhase === 1 && this.dashTimer <= 0) {
+      this.dashTimer += 8;
+      this.beginDash(game.player);
+    }
+  }
+
+  beginCast(kind) {
+    this.cast = { kind, time: 0, duration: 0.75 };
+    this.sheetAnim = "cast";
+    this.dashing = false;
+  }
+
+  advanceCast(dt, game) {
+    this.sheetAnim = "cast";
+    this.cast.time += dt;
+    if (this.cast.time < this.cast.duration) return;
+    const kind = this.cast.kind;
+    this.cast = null;
+    this.sheetAnim = "walk";
+    if (kind === "marks") this.plantMarks(game.player);
+    if (kind === "bats") {
+      game.spawnLordBats(this.batRingCount());
+      if (this.lordPhase === 2) this.beginDash(game.player);
+    }
+  }
+
+  /** Three planted circles. They use the warden windup and do not follow. */
+  plantMarks(player) {
+    const spread = 110;
+    this.marks = [];
+    for (let i = 0; i < 3; i += 1) {
+      const angle = -Math.PI / 2 + (i - 1) * ((Math.PI * 2) / 3);
+      this.marks.push({
+        x: player.x + Math.cos(angle) * spread,
+        y: player.y + Math.sin(angle) * spread,
+        radius: LORD_MARK_RADIUS,
+        windup: LORD_MARK_WINDUP,
+        windupMax: LORD_MARK_WINDUP,
+        burst: 0,
+      });
+    }
+  }
+
+  advanceMarks(dt) {
+    if (!this.marks) return;
+    const pending = [];
+    for (const mark of this.marks) {
+      if (mark.burst > 0) {
+        mark.burst -= dt;
+        if (mark.burst > 0) pending.push(mark);
+        continue;
+      }
+      mark.windup -= dt;
+      if (mark.windup <= 0) {
+        this.pulses.push({
+          x: mark.x,
+          y: mark.y,
+          radius: mark.radius,
+          damage: this.damage + 12,
+        });
+        mark.burst = 0.32;
+        pending.push(mark);
+      } else {
+        pending.push(mark);
+      }
+    }
+    this.marks = pending;
+  }
+
+  beginDash(player) {
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    this.dash = {
+      phase: "line",
+      time: 0,
+      duration: LORD_DASH_TELEGRAPH,
+      dx: dx / dist,
+      dy: dy / dist,
+      traveled: 0,
+      distance: LORD_DASH_DISTANCE,
+    };
+    this.dashing = false;
+    this.sheetAnim = "walk";
+    this.facingRow = facingIndex(dx, dy);
+  }
+
+  advanceDash(dt) {
+    const dash = this.dash;
+    if (!dash) return;
+    if (dash.phase === "line") {
+      dash.time += dt;
+      this.dashing = false;
+      this.sheetAnim = "walk";
+      this.facingRow = facingIndex(dash.dx, dash.dy);
+      if (dash.time >= dash.duration) {
+        dash.phase = "go";
+        this.dashing = true;
+        this.sheetAnim = "dash";
+      }
+      return;
+    }
+    this.dashing = true;
+    this.sheetAnim = "dash";
+    this.facingRow = facingIndex(dash.dx, dash.dy);
+    const speed = LORD_DASH_DISTANCE / 0.32;
+    const step = Math.min(speed * dt, Math.max(0, dash.distance - dash.traveled));
+    this.x += dash.dx * step;
+    this.y += dash.dy * step;
+    dash.traveled += step;
+    if (dash.traveled >= dash.distance - 0.01) {
+      this.dash = null;
+      this.dashing = false;
+      this.sheetAnim = "walk";
+    }
   }
 
   /**
@@ -131,54 +363,62 @@ export class Enemy {
       this.drawWarden(ctx, time);
       return;
     }
-    const sheet = enemySheets?.[this.type];
-    if (sheet?.image && sheet.bodyBox?.w > 0) {
+    const sheet = this.sheetForDraw();
+    if (sheet?.image && sheet.bodyBox?.w > 0 && sheet.bodyBox?.h > 0) {
       this.drawSprite(ctx, sheet);
       return;
     }
     this.drawShape(ctx, time);
   }
 
+  sheetForDraw() {
+    if (this.type === "lord") {
+      const pack = enemySheets?.lord;
+      return pack?.[this.sheetAnim] || pack?.walk || null;
+    }
+    return enemySheets?.[this.type] || null;
+  }
+
   /**
-   * bodyBox width maps onto the hit diameter so the painted body lines up
-   * with the old circle. The body-box centre sits on the collision point.
-   * walkFrames is 1, so a short vertical bob stands in for a cycle.
+   * bodyBox places the feet on the entity and scales the painted body to
+   * BODY_HEIGHT. It does not change the collision radius.
    */
   drawSprite(ctx, sheet) {
     const box = sheet.bodyBox;
-    const scale = (this.radius * 2) / box.w;
-    const bob = Math.sin(this.bob) * 2.5;
-    const bodyCx = box.x + box.w / 2;
-    const bodyCy = box.y + box.h / 2;
+    const height = BODY_HEIGHT[this.type] || 44;
+    const scale = height / box.h;
+    const footX = box.x + box.w / 2;
+    const footY = box.y + box.h;
+    const frames = sheet.walkFrames >= 1 ? sheet.walkFrames : 1;
+    const col = Math.floor((this.animTime * this.walkFps() + this.animPhase * frames) % frames);
     const image = this.hitFlash > 0 ? tintedSheet(sheet.image) : sheet.image;
 
     ctx.save();
     ctx.translate(Math.round(this.x), Math.round(this.y));
     ctx.imageSmoothingEnabled = false;
 
-    const footY = (box.h / 2) * scale;
     ctx.fillStyle = "rgba(0, 0, 0, 0.32)";
     ctx.beginPath();
-    ctx.ellipse(0, footY, this.radius * 0.85, 4.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, Math.max(8, box.w * scale * 0.35), 4.2, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.drawImage(
       image,
-      0,
+      col * sheet.frameWidth,
       this.facingRow * sheet.frameHeight,
       sheet.frameWidth,
       sheet.frameHeight,
-      -bodyCx * scale,
-      -bodyCy * scale + bob,
+      -footX * scale,
+      -footY * scale,
       sheet.frameWidth * scale,
       sheet.frameHeight * scale,
     );
     ctx.restore();
 
-    if (this.hp < this.maxHp) {
+    if (this.type !== "lord" && this.hp < this.maxHp) {
       const w = this.radius * 2;
       const x = this.x - w / 2;
-      const y = this.y + bob - footY - 8;
+      const y = this.y - height - 8;
       ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
       ctx.fillRect(x, y, w, 3);
       ctx.fillStyle = "#e15b55";

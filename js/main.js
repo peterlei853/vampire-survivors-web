@@ -18,9 +18,9 @@ game.setArt(art);
 // Useful fields: state, time, kills, player (xp, level, facing, censer, pyre, cross),
 // enemies, eliteState, spawnInterval(), input.touch (stick visible / vector),
 // sprites.player (loaded sheet), sprites.tileset (graveyard floor, or the
-// older tileset if that image failed), sprites.enemies (bat, shambler, brute),
+// older tileset if that image failed), sprites.enemies (bat, shambler, brute, lord),
 // weaponSummary() (stake, censer, pyre, cross,
-// magnet, elite, threat), applyUpgrade(id), toggleMute().
+// magnet, elite, threat), applyUpgrade(id), toggleMute(), debugJumpToLord().
 // window.__begin(characterId) starts a run. Missing or unknown ids use the hunter.
 window.__game = game;
 ui.setMuted(game.audio.muted);

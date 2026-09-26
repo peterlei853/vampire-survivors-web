@@ -32,6 +32,11 @@ export class UI {
     this.winOverlay = document.getElementById("overlay-win");
     this.winSummary = document.getElementById("win-summary");
     this.perf = document.getElementById("perf");
+    this.bossBar = document.getElementById("boss-bar");
+    this.bossFill = document.getElementById("boss-fill");
+    this.bossHp = document.getElementById("boss-hp");
+    this.lordBanner = document.getElementById("lord-banner");
+    this.winTitle = document.getElementById("win-title");
     this.choices = document.getElementById("choices");
     this.summary = document.getElementById("summary");
   }
@@ -44,6 +49,10 @@ export class UI {
     this.levelOverlay.classList.toggle("hidden", mode !== "levelup");
     this.overOverlay.classList.toggle("hidden", mode !== "gameover");
     if (this.winOverlay) this.winOverlay.classList.toggle("hidden", mode !== "victory");
+    if (mode !== "playing" && mode !== "levelup") {
+      this.bossBar?.classList.add("hidden");
+      this.lordBanner?.classList.add("hidden");
+    }
   }
 
   setPerfVisible(on) {
@@ -52,10 +61,15 @@ export class UI {
     this.perf.setAttribute("aria-hidden", on ? "false" : "true");
   }
 
-  setPerf(fps, enemies) {
+  setPerf(fps, enemies, lord) {
     if (!this.perf) return;
     const shown = Number.isFinite(fps) ? Math.round(fps) : 0;
-    this.perf.textContent = `FPS ${shown} · Enemies ${enemies}`;
+    let text = `FPS ${shown} · Enemies ${enemies}`;
+    if (lord) {
+      const hp = Math.max(0, Math.round(lord.hp));
+      text += ` · Lord ${hp}/${lord.maxHp} · Phase ${lord.lordPhase}`;
+    }
+    this.perf.textContent = text;
   }
 
   updateHUD(game) {
@@ -99,6 +113,25 @@ export class UI {
       this.magnetReadout.classList.toggle("armed", player.magnetStacks > 0);
     }
     this.setOmen(game.omen);
+    this.updateBoss(game);
+  }
+
+  updateBoss(game) {
+    const approaching = game.lordState === "approaching";
+    if (this.lordBanner) {
+      this.lordBanner.classList.toggle("hidden", !approaching);
+      this.lordBanner.setAttribute("aria-hidden", approaching ? "false" : "true");
+    }
+    const lord = game.lordState === "alive"
+      ? game.enemies?.find((enemy) => enemy.type === "lord" && enemy.hp > 0)
+      : null;
+    if (!this.bossBar) return;
+    this.bossBar.classList.toggle("hidden", !lord);
+    this.bossBar.setAttribute("aria-hidden", lord ? "false" : "true");
+    if (!lord || !this.bossFill) return;
+    const ratio = lord.maxHp > 0 ? Math.max(0, lord.hp) / lord.maxHp : 0;
+    this.bossFill.style.width = `${ratio * 100}%`;
+    if (this.bossHp) this.bossHp.textContent = `${Math.max(0, Math.ceil(lord.hp))}`;
   }
 
   setMuted(muted) {
@@ -170,6 +203,7 @@ export class UI {
 
   showDawn(stats) {
     if (!this.winSummary) return;
+    if (this.winTitle) this.winTitle.textContent = stats.title || "Dawn breaks";
     this.winSummary.replaceChildren();
     const rows = [
       ["Survived", formatTime(stats.time)],
