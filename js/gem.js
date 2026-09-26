@@ -1,5 +1,7 @@
 /** XP gem. Drifts toward the player inside the magnet radius. */
 
+import { drawCell, fx } from "./fxart.js";
+
 export class Gem {
   constructor(x, y, value) {
     this.x = x;
@@ -38,6 +40,16 @@ export class Gem {
 
   draw(ctx) {
     const bob = Math.sin(this.bob) * 2;
+    if (fx.gems) {
+      const col = this.rich ? 0 : this.value >= 5 ? 2 : 1;
+      const row = this.rich ? 2 : this.value >= 5 ? 1 : 0;
+      const draw = this.rich ? 16 : this.value >= 5 ? 16 : 14;
+      ctx.save();
+      ctx.translate(this.x, this.y + bob);
+      drawCell(ctx, fx.gems, 3, 3, col, row, draw);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(this.x, this.y + bob);
     ctx.rotate(Math.PI / 4);

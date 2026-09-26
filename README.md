@@ -1,6 +1,6 @@
 # vampire-survivors-web
 
-Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.4.0 is a playable night: move with the keyboard or a touch stick, auto-attack with a stake, an unlockable censer, pyre, and ash cross, pull gems in with a magnet boon, level up, and survive a spawn curve that starts sparse, thickens, and brings a warden around the second minute.
+Nightfall is a Vampire Survivors–inspired survival roguelite that runs in the browser. v0.5.0 is a playable night: move with the keyboard or a touch stick, auto-attack with a stake, an unlockable censer, pyre, and ash cross, pull gems in with a magnet boon, level up, and survive a spawn curve that starts sparse, thickens, and brings a warden around the second minute. The hunter and the ground are PixelLab pixel art. Weapons, impacts, and gems are CC0 sprites from OpenGameArt, listed in [assets/CREDITS.md](assets/CREDITS.md).
 
 This is an original prototype. It is not affiliated with poncle or Vampire Survivors.
 
@@ -60,7 +60,7 @@ Not in this port: the browser hook `window.__game`, pausing when a browser tab i
 
 ## Tests
 
-Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.4.0. How to run it is in [qa/README.md](qa/README.md).
+Smoke coverage lives under `qa/`. It drives the page in Chromium and asserts through `window.__game` / `weaponSummary()`. The document title pin matches v0.5.0. How to run it is in [qa/README.md](qa/README.md).
 
 ```bash
 npm install
@@ -86,9 +86,13 @@ HUD, from the top: kills and version, survival timer, omen line, weapon chips, l
 
 - `index.html` — shell, HUD, level-up, and game-over UI
 - `css/style.css` — layout and theme
-- `js/main.js` — boot and overlay shortcuts
+- `js/main.js` — boot, art preload, and overlay shortcuts
+- `js/art.js` — PixelLab sprite sheet and graveyard tiles
+- `js/fxart.js` — CC0 weapon, impact, and gem sprites
 - `js/game.js` — loop, spawn curve, combat, warden timing, camera, upgrade choices
-- `js/player.js` — movement, stats, XP curve
+- `js/player.js` — movement, stats, XP curve, facing, and the walk cycle
+- `assets/` — `player_sheet.png` and `tileset.png` (PixelLab), plus their JSON metadata
+- `assets/oga/` — CC0 weapon, impact, and gem sprites. Credits are in [assets/CREDITS.md](assets/CREDITS.md)
 - `js/censer.js` — orbiting warding censer
 - `js/pyre.js` — cinder pyre flasks and burning pools
 - `js/cross.js` — ash cross and its returning bolts
@@ -144,3 +148,21 @@ Not in this build yet:
 - Meta progression, accounts, or save data beyond the mute flag
 - The smoke suite in `qa/` is the automated check; it does not replace a longer play session
 - Sprite art or recorded samples; characters, fire, and sound are generated in the page
+
+## v0.5.0 notes for Engineer and QA
+
+Still true from v0.4.0: the touch stick, Grave Magnet, Ash Cross, mute, the 40 XP first level, the spawn ramp, and one Warden per night. Hitbox radius stays 14. Combat numbers were not retuned.
+
+New in this build:
+
+- **Pixel-art hunter.** The player is drawn from `assets/player_sheet.png`, generated with [PixelLab](https://pixellab.ai). The sheet is 7 columns by 8 rows of 68×68. Rows are south, south-east, east, north-east, north, north-west, west, south-west. Column 0 is idle. Columns 1–6 are a walk cycle at about 10 frames per second, played only while the movement axis is held. Facing is 8-way from that vector and stays on the last direction when you stop. Scaling is nearest-neighbor (`imageSmoothingEnabled = false`). The 68px cell is drawn a little over native size so she is about 66px tall at 1280×720, centred on the hitbox. The hitbox radius stays 14. A soft shadow sits under her feet. `player.facing` is the row name (`east`, `west`, …). If the sheet fails to load, the previous shape-drawn hunter is used.
+- **Graveyard ground.** The flat fill is replaced by a camera-following PixelLab top-down Wang tileset (`assets/tileset.png`, metadata in `assets/tileset_metadata.json`): dark mossy dirt, with deterministic cobblestone patches hashed from world tile coordinates and transition tiles from each tile's `bounding_box`. Visible chunks are cached. A dark overlay and the existing vignette keep the night readable so enemies and projectiles still stand out. If the tileset fails to load, the old dotted background is used.
+- Images are preloaded in `js/main.js` before `window.__game` is published and before the frame loop starts. `window.__game.sprites.player` is the loaded sheet (or null).
+- **Weapon sprites.** The stake, warding censer, cinder pyre (flask and pool), and ash cross, plus hit puffs and XP gems, are drawn from CC0 pixel art in `assets/oga/`. Bolts and the pyre flask rotate to their travel direction. The cross spins. On screen the stake and flask are about 28–32px, the ash cross about 32px of artwork inside a slightly larger cell, the censer orb 24px, and gems 14–16px. Hitboxes and damage are unchanged. If a sprite fails to load, that effect falls back to the old shape. Sources, authors, and the CC0 license are in [assets/CREDITS.md](assets/CREDITS.md).
+
+Not in this build yet:
+
+- Chests, evolutions, obstacles, or biomes
+- Gamepad
+- Meta progression, accounts, or save data beyond the mute flag
+- Recorded audio samples; cues are still synthesized. Enemies are still drawn in code

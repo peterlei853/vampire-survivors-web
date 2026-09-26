@@ -1,6 +1,7 @@
 /** World loop: spawn, chase, stake, censer, pyre, cross, warden, gems, level-up, camera. */
 
 import { AudioBus } from "./audio.js";
+import { applyFx, drawStrip, fx } from "./fxart.js";
 import {
   CENSER_DAMAGE_STEP,
   CENSER_MAX_DAMAGE,
@@ -419,10 +420,16 @@ class Spark {
   }
 
   draw(ctx) {
-    ctx.globalAlpha = Math.max(0, this.life / this.max);
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.radius, this.radius);
-    ctx.globalAlpha = 1;
+    const alpha = Math.max(0, this.life / this.max);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x, this.y);
+    const frame = (1 - alpha) * 4;
+    if (!drawStrip(ctx, fx.spark, 5, frame, 20)) {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(0, 0, this.radius, this.radius);
+    }
+    ctx.restore();
   }
 }
 
@@ -460,6 +467,8 @@ export class Game {
     this.ui = ui;
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.audio = new AudioBus();
+    this.art = null;
+    this.sprites = { player: null, tileset: null };
     this.dpr = 1;
     this.viewW = 800;
     this.viewH = 600;
@@ -470,8 +479,18 @@ export class Game {
     this.state = "menu";
   }
 
+  /** Called once images have settled, including when a sheet failed to load. */
+  setArt(art) {
+    this.art = art;
+    this.sprites.player = art?.playerImage || null;
+    this.sprites.tileset = art?.tilesetImage || null;
+    applyFx(art?.fx);
+    if (this.player) this.player.attachArt(art);
+  }
+
   resetWorld() {
     this.player = new Player(0, 0);
+    if (this.art) this.player.attachArt(this.art);
     this.enemies = [];
     this.projectiles = [];
     this.crosses = [];
@@ -1125,6 +1144,7 @@ export class Game {
     const w = this.viewW;
     const h = this.viewH;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, w, h);
 
     let shakeX = 0;
@@ -1171,6 +1191,19 @@ export class Game {
   }
 
   drawBackground(ctx, w, h, shakeX, shakeY) {
+    const ground = this.art?.ground;
+    if (ground) {
+      ctx.fillStyle = "#071018";
+      ctx.fillRect(0, 0, w, h);
+      ground.draw(ctx, this.camera, w, h, shakeX, shakeY);
+      ctx.fillStyle = "rgba(6, 8, 16, 0.34)";
+      ctx.fillRect(0, 0, w, h);
+      if (this.state === "menu") {
+        ctx.fillStyle = "rgba(4, 6, 12, 0.5)";
+        ctx.fillRect(0, 0, w, h);
+      }
+      return;
+    }
     ctx.fillStyle = "#10141c";
     ctx.fillRect(0, 0, w, h);
     const spacing = 64;

@@ -1,5 +1,7 @@
 /** Cinder Pyre: flasks arc onto foes and leave a pool that keeps burning. */
 
+import { drawStrip, fx } from "./fxart.js";
+
 export const PYRE_MAX_CHARGES = 3;
 export const PYRE_MAX_DAMAGE = 12;
 export const PYRE_MAX_RADIUS = 78;
@@ -69,6 +71,16 @@ export class PyreFlask {
   }
 
   draw(ctx) {
+    const t = 1 - Math.max(0, this.life) / this.max;
+    const dx = this.tx - this.sx;
+    const dy = (this.ty - this.sy) - Math.cos(t * Math.PI) * 26 * Math.PI;
+    if (fx.fireball) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      drawStrip(ctx, fx.fireball, 6, -this.life * 14, 28, Math.atan2(dy, dx));
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(Math.PI / 4);
@@ -112,6 +124,23 @@ export class PyrePool {
 
   draw(ctx, time) {
     const fade = Math.max(0, this.life / this.max);
+    if (fx.firebomb) {
+      ctx.save();
+      ctx.globalAlpha = 0.35 + fade * 0.65;
+      ctx.translate(this.x, this.y + 4);
+      const frame = time * 10;
+      drawStrip(ctx, fx.firebomb, 6, frame, 26, 0);
+      const reach = Math.max(8, this.radius - 12);
+      for (let i = 0; i < 4; i += 1) {
+        const angle = time * 1.3 + (i * Math.PI) / 2;
+        ctx.save();
+        ctx.translate(Math.cos(angle) * reach, Math.sin(angle) * reach * 0.55);
+        drawStrip(ctx, fx.firebomb, 6, frame + i * 1.5, 22, 0);
+        ctx.restore();
+      }
+      ctx.restore();
+      return;
+    }
     const breathe = 0.92 + Math.sin(time * 8) * 0.06;
     ctx.save();
     ctx.translate(this.x, this.y + 4);

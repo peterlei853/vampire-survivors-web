@@ -1,5 +1,7 @@
 /** Warding Censer: spokes sweep around the hunter and burn what they touch. */
 
+import { drawStrip, fx } from "./fxart.js";
+
 export const CENSER_MAX_ORBS = 4;
 export const CENSER_MAX_DAMAGE = 20;
 export const CENSER_MAX_RADIUS = 132;
@@ -91,6 +93,16 @@ export class Censer {
   draw(ctx, player, time) {
     if (!this.owned) return;
     const spokes = this.spokes(player);
+    if (fx.orb) {
+      for (let i = 0; i < spokes.length; i += 1) {
+        const spoke = spokes[i];
+        ctx.save();
+        ctx.translate(spoke.x1, spoke.y1);
+        drawStrip(ctx, fx.orb, 6, time * 10 + i, 24);
+        ctx.restore();
+      }
+      return;
+    }
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.strokeStyle = "rgba(198, 214, 232, 0.16)";
