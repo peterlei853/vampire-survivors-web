@@ -1,4 +1,6 @@
-/** PixelLab sheet and Wang tiles. Missing images leave the shape-drawn fallback in place. */
+/** PixelLab sheet and Wang tiles, plus the CC0 weapon sprites. Missing images leave the shape-drawn fallback in place. */
+
+import { loadFx } from "./fxart.js";
 
 const PLAYER_URL = new URL("../assets/player_sheet.png", import.meta.url);
 const PLAYER_META_URL = new URL("../assets/player_sheet.json", import.meta.url);
@@ -182,11 +184,12 @@ class Ground {
  * caller keeps the previous drawing path for that layer.
  */
 export async function loadArt() {
-  const [playerImage, playerMeta, tilesetImage, tilesetMeta] = await Promise.all([
+  const [playerImage, playerMeta, tilesetImage, tilesetMeta, fx] = await Promise.all([
     loadImage(PLAYER_URL),
     loadJson(PLAYER_META_URL),
     loadImage(TILESET_URL),
     loadJson(TILESET_META_URL),
+    loadFx(),
   ]);
 
   const rows = Array.isArray(playerMeta?.rows) && playerMeta.rows.length === 8
@@ -207,5 +210,6 @@ export async function loadArt() {
     rows,
     walkFrames: playerMeta?.walkFrames || 6,
     ground,
+    fx,
   };
 }

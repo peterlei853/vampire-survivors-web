@@ -1,5 +1,7 @@
 /** Ash Cross: a thrown cross that flies out, then returns, and cuts on both passes. */
 
+import { drawStrip, fx } from "./fxart.js";
+
 export const CROSS_MAX_COUNT = 3;
 export const CROSS_MAX_DAMAGE = 22;
 export const CROSS_MAX_RANGE = 320;
@@ -95,6 +97,13 @@ export class AshBolt {
   }
 
   draw(ctx) {
+    if (fx.cross) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      drawStrip(ctx, fx.cross, 1, 0, 28, this.spin);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.strokeStyle = "rgba(232, 210, 180, 0.32)";

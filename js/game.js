@@ -1,6 +1,7 @@
 /** World loop: spawn, chase, stake, censer, pyre, cross, warden, gems, level-up, camera. */
 
 import { AudioBus } from "./audio.js";
+import { applyFx, drawStrip, fx } from "./fxart.js";
 import {
   CENSER_DAMAGE_STEP,
   CENSER_MAX_DAMAGE,
@@ -419,10 +420,16 @@ class Spark {
   }
 
   draw(ctx) {
-    ctx.globalAlpha = Math.max(0, this.life / this.max);
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.radius, this.radius);
-    ctx.globalAlpha = 1;
+    const alpha = Math.max(0, this.life / this.max);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x, this.y);
+    const frame = (1 - alpha) * 4;
+    if (!drawStrip(ctx, fx.spark, 5, frame, 14)) {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(0, 0, this.radius, this.radius);
+    }
+    ctx.restore();
   }
 }
 
@@ -477,6 +484,7 @@ export class Game {
     this.art = art;
     this.sprites.player = art?.playerImage || null;
     this.sprites.tileset = art?.tilesetImage || null;
+    applyFx(art?.fx);
     if (this.player) this.player.attachArt(art);
   }
 

@@ -1,5 +1,7 @@
 /** Auto-aimed stake. `hitsLeft` is 1 plus pierce. */
 
+import { drawStrip, fx } from "./fxart.js";
+
 export class Projectile {
   constructor(x, y, vx, vy, damage, pierce, life) {
     this.x = x;
@@ -21,6 +23,13 @@ export class Projectile {
 
   draw(ctx) {
     const angle = Math.atan2(this.vy, this.vx);
+    if (fx.bolt) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      drawStrip(ctx, fx.bolt, 6, -this.life * 12, 22, angle);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(angle);
