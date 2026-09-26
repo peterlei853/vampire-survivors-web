@@ -568,7 +568,7 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
   const tuning = await page.evaluate(() => {
     const game = window.__game;
     const scale = (time) => 1 + Math.max(0, time - 30) / 220;
-    const wardenHp = (time, generation) => Math.round(280 * scale(time) * (1.25 ** generation));
+    const wardenHp = (time, generation) => Math.round(280 * scale(time) * (1.5 ** generation));
 
     const damageBefore = game.player.damage;
     game.applyUpgrade("damage");
