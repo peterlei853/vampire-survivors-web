@@ -35,6 +35,8 @@ export const CHARACTERS = {
     /** Same layout as the hunter. A missing file uses the hunter sheet, tinted darker. */
     tintFallback: "hunter",
     sheet: {
+      /** Flip on once player_sheet.png is in the folder. Off avoids a 404 while the art is still out. */
+      ready: false,
       frameWidth: 80,
       frameHeight: 80,
       walkFrames: 6,

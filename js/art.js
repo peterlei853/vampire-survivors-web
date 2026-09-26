@@ -278,7 +278,7 @@ function assetUrl(path) {
 /** Try each file pair on the character row. The first image that loads wins. */
 async function loadCharacterArt(character) {
   const spec = character.sheet;
-  if (!spec) return null;
+  if (!spec || spec.ready === false) return null;
   const defaults = {
     frameWidth: spec.frameWidth || 68,
     frameHeight: spec.frameHeight || 68,
