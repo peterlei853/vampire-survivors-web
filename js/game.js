@@ -1403,6 +1403,11 @@ export class Game {
     return FX.stats();
   }
 
+  /** Whole-pixel shake. `{x:0,y:0}` once `FX.reset()` has cleared the last night. */
+  fxShake() {
+    return FX.shakeOffset();
+  }
+
   /** Ids that can still be rolled, before fallbacks fill a short table. */
   availableOffers() {
     const capped = ownedWeaponCount(this.player) >= WEAPON_CAP;

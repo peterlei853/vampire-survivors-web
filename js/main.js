@@ -36,6 +36,7 @@ function begin(characterId) {
   const id = writeCharacterId(characterId || readCharacterId());
   game.audio.unlock();
   FX.unlockAudio();
+  FX.reset();
   game.start(id);
   canvas.focus();
 }

@@ -1264,3 +1264,47 @@ test("torch, holy water, and scythe at max stay inside the FX caps at 220 foes",
   expect(perf.fps).toBeGreaterThan(55);
   console.log(`F3 area weapons: ${perf.text} (raw ${perf.fps.toFixed(1)}, enemies ${perf.enemies}, peak p${perf.peak.particles} n${perf.peak.numbers} v${perf.peak.voices})`);
 });
+
+test("a restart clears hit particles, damage numbers, and shake", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await page.evaluate(() => {
+    const game = window.__game;
+    const foe = game.enemies.find((enemy) => enemy.hp > 0);
+    game.hitEnemy(foe, 22, "scythe");
+    game.player.hp = 0;
+  });
+  await page.waitForFunction(() => window.__game.state === "gameover");
+
+  const cleared = await page.evaluate(() => {
+    const game = window.__game;
+    const before = game.fxStats();
+    let shakeBefore = 0;
+    for (let i = 0; i < 16; i += 1) {
+      const kick = game.fxShake();
+      shakeBefore = Math.max(shakeBefore, Math.abs(kick.x), Math.abs(kick.y));
+    }
+    window.__begin(game.characterId);
+    const after = game.fxStats();
+    let shakeAfter = 0;
+    for (let i = 0; i < 16; i += 1) {
+      const kick = game.fxShake();
+      shakeAfter = Math.max(shakeAfter, Math.abs(kick.x), Math.abs(kick.y));
+    }
+    return {
+      beforeParticles: before.particles,
+      beforeNumbers: before.numbers,
+      shakeBefore,
+      particles: after.particles,
+      numbers: after.numbers,
+      shake: shakeAfter,
+    };
+  });
+
+  expect(cleared.beforeParticles).toBeGreaterThan(0);
+  expect(cleared.beforeNumbers).toBeGreaterThan(0);
+  expect(cleared.shakeBefore).toBeGreaterThan(0);
+  expect(cleared.particles).toBe(0);
+  expect(cleared.numbers).toBe(0);
+  expect(cleared.shake).toBe(0);
+});

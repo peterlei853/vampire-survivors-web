@@ -96,6 +96,7 @@ function blip(weapon, loud = 1) {
 // ---------- public API ----------
 export const FX = {
   FLASH_S: 0.07,
+  reset() { for (const p of P) p.live = false; liveCount = 0; nums.length = 0; shakeT = shakeAmp = 0; },  // call from begin()
   unlockAudio() { if (!ac) blip('dagger', 0); ac?.resume?.(); },  // call from first keydown/click
 
   hit(weapon, x, y, { dmg = 0, crit = false, enemyId = null, kill = false, boss = false } = {}) {
