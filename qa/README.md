@@ -1,6 +1,6 @@
 # Nightfall smoke suite
 
-Automated smoke checks for the v0.5.2 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.5.2). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the enemy sheets and graveyard tileset. One covers the v0.5.1 tuning pass. Four cover character select. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
+Automated smoke checks for the v0.6 client. Six specs cover the v0.2.0 behaviors (the document title pin is v0.6). Three cover Cinder Pyre, mute, and the Warden. Three more cover Ash Cross, Grave Magnet, and the touch stick. One covers the PixelLab player sheet. One covers the enemy sheets and graveyard tileset, checked against each sheet's JSON. One covers the v0.5.1 tuning pass. Four cover character select. Three cover the brute hitbox, the Vampire Lord, and a 10:00 crowd at the 220 cap. One checks that each character's card and in-game sprite share a sheet and that `player_sheet` is never requested. One dies at 9:30 with the Lord alive, restarts, and checks `BossUI` is inactive before 9:00. Two cover the endings: dawn with the Lord alive or never spawned, and Lord slain on a gold banner. The specs live in `qa/smoke.spec.js` and drive the real page through Chromium. Playwright starts `python3 -m http.server` on port **8099** (the dev server on 8080 is left alone).
 
 Assertions go through the live handle in `js/main.js`:
 
@@ -35,7 +35,8 @@ No gameplay numbers are changed in source. Level-up is forced by granting the XP
 | Grave Magnet stacks | `applyUpgrade("magnet")` walks 110 → 152 → 194 → 236 → 278 → 320, the HUD reads `Magnet 320`, and a further call is refused. Pickup radius stays 22 |
 | v0.5.1 tuning | Caps, batch sizes, stake ×1.2, haste floor 0.25s, bat speed cap, XP salvage, swarms that stack past the cap and pause normal spawns, warden HP on the return, Dawn breaks after a level-up card (even with a living warden), and F3 |
 | touch stick | On desktop the stick stays hidden. A mouse pointer does nothing. A touch drag sets `input.touch` and shows `#stick`. Holding **W** replaces that vector |
-| player sprite and facing | `sprites.player` is a loaded 476×544 sheet. Holding **D** sets `player.facing` to `east` and it stays after release. Holding **A** sets `west` and it stays after release |
+| player sprite and facing | `sprites.player` is the loaded 448×512 Hunter sheet. Holding **D** sets `player.facing` to `east` and it stays after release. Holding **A** sets `west` and it stays after release |
+| character sheets | Each select card's canvas and that hunter's in-game sprite use the same sheet URL (`hunter_sheet` or `stakeman_sheet`). Nothing requests `player_sheet` |
 | enemy sheets and graveyard tileset | Bat 68×544, shambler 92×736, and brute 104×832 sheets load, and the floor image is `tileset_graveyard.png` at 128×128 (`tilesetKind === "graveyard"`). A filled crowd still reports FPS on **F3** |
 | begin(characterId) | `__begin("hunter")` and `__begin("warden_hunter")` set that body's HP, speed, stake, interval, and pierce. Sharpened Stake, Hasty Ritual, and Fleet Foot scale from that base |
 | saved character fallback | `nightfall.character` of `nope`, or a missing key, starts the hunter |

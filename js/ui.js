@@ -32,6 +32,8 @@ export class UI {
     this.winOverlay = document.getElementById("overlay-win");
     this.winSummary = document.getElementById("win-summary");
     this.perf = document.getElementById("perf");
+    this.winTitle = document.getElementById("win-title");
+    this.winBanner = document.getElementById("win-banner");
     this.choices = document.getElementById("choices");
     this.summary = document.getElementById("summary");
   }
@@ -52,10 +54,15 @@ export class UI {
     this.perf.setAttribute("aria-hidden", on ? "false" : "true");
   }
 
-  setPerf(fps, enemies) {
+  setPerf(fps, enemies, lord) {
     if (!this.perf) return;
     const shown = Number.isFinite(fps) ? Math.round(fps) : 0;
-    this.perf.textContent = `FPS ${shown} · Enemies ${enemies}`;
+    let text = `FPS ${shown} · Enemies ${enemies}`;
+    if (lord) {
+      const hp = Math.max(0, Math.round(lord.hp));
+      text += ` · Lord ${hp}/${lord.maxHp} · Phase ${lord.lordPhase}`;
+    }
+    this.perf.textContent = text;
   }
 
   updateHUD(game) {
@@ -170,6 +177,11 @@ export class UI {
 
   showDawn(stats) {
     if (!this.winSummary) return;
+    if (this.winTitle) this.winTitle.textContent = stats.title || "Dawn breaks — the Lord escapes";
+    if (this.winBanner) {
+      this.winBanner.classList.toggle("hidden", !stats.gold);
+      this.winBanner.textContent = stats.gold ? "Lord slain" : "";
+    }
     this.winSummary.replaceChildren();
     const rows = [
       ["Survived", formatTime(stats.time)],

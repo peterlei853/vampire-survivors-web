@@ -26,14 +26,14 @@ const FACINGS = [
 const WALK_FPS = 10;
 
 /**
- * The painted figure is about 52px of the 68px cell (lots of empty margin).
- * Drawing the cell at 86px, nearest-neighbor, puts her about 66px tall at
- * 1280×720: inside the 60–72px range, a little over 1× the source cell.
- * The figure is centred on the hitbox. Radius stays 14.
+ * On-screen body height for both hunters. A sheet's bodyBox puts the feet on
+ * the entity. Radius stays 14. The cell numbers below are only for a sheet
+ * that arrives without a bodyBox.
  */
-const SPRITE_DRAW = 86;
+const BODY_HEIGHT = 48;
+const HUNTER_CELL = 68;
+const HUNTER_FIGURE = 52;
 const FIGURE_CX = 33.5;
-const FIGURE_CY = 32.5;
 const FIGURE_FOOT = 57;
 
 /** 8-way index for a screen-space vector. 0 is south, then SE, E, NE, N, NW, W, SW. */
@@ -100,7 +100,8 @@ export class Player {
       frameWidth: sheet.frameWidth,
       frameHeight: sheet.frameHeight,
       rows: sheet.rows,
-      walkFrames: sheet.walkFrames,
+      walkFrames: sheet.walkFrames >= 1 ? sheet.walkFrames : 1,
+      bodyBox: sheet.bodyBox || null,
     };
     const name = this.art.rows?.[this.facingRow];
     if (name) this.facing = name;
@@ -149,26 +150,35 @@ export class Player {
     const image = art.playerImage;
     const frameW = art.frameWidth;
     const frameH = art.frameHeight;
+    const frames = art.walkFrames >= 1 ? art.walkFrames : 1;
     const col = this.moving
-      ? 1 + (Math.floor(this.walkTime * WALK_FPS) % art.walkFrames)
+      ? 1 + (Math.floor(this.walkTime * WALK_FPS) % frames)
       : 0;
+    const box = art.bodyBox;
+    let scale = BODY_HEIGHT / HUNTER_FIGURE;
+    let anchorX = FIGURE_CX;
+    let anchorY = FIGURE_FOOT;
+    if (box && box.h > 0) {
+      scale = BODY_HEIGHT / box.h;
+      anchorX = box.x + box.w / 2;
+      anchorY = box.y + box.h;
+    } else if (frameH > 0 && frameH !== HUNTER_CELL) {
+      const figureH = HUNTER_FIGURE * (frameH / HUNTER_CELL);
+      scale = BODY_HEIGHT / figureH;
+      anchorX = FIGURE_CX * (frameW / HUNTER_CELL);
+      anchorY = FIGURE_FOOT * (frameH / HUNTER_CELL);
+    }
     ctx.save();
     ctx.translate(Math.round(this.x), Math.round(this.y));
     if (this.hp <= 0) ctx.globalAlpha = 0.45;
     else if (this.invuln > 0) ctx.globalAlpha = 0.45 + 0.4 * Math.sin(time * 30);
 
-    const cell = 68;
-    const scale = SPRITE_DRAW / frameW;
-    const figureCx = FIGURE_CX * (frameW / cell);
-    const figureCy = FIGURE_CY * (frameH / cell);
-    const figureFoot = FIGURE_FOOT * (frameH / cell);
-    const footY = (figureFoot - figureCy) * scale;
-    const shadow = ctx.createRadialGradient(0, footY, 2, 0, footY, 24);
+    const shadow = ctx.createRadialGradient(0, 0, 2, 0, 0, 22);
     shadow.addColorStop(0, "rgba(0, 0, 0, 0.55)");
     shadow.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = shadow;
     ctx.beginPath();
-    ctx.ellipse(0, footY, 24, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 18, 7, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.imageSmoothingEnabled = false;
@@ -178,10 +188,10 @@ export class Player {
       this.facingRow * frameH,
       frameW,
       frameH,
-      -figureCx * scale,
-      -figureCy * scale,
-      SPRITE_DRAW,
-      SPRITE_DRAW * (frameH / frameW),
+      -anchorX * scale,
+      -anchorY * scale,
+      frameW * scale,
+      frameH * scale,
     );
     ctx.restore();
   }

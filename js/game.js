@@ -1,7 +1,8 @@
 /** World loop: spawn, chase, stake, censer, pyre, cross, warden, gems, level-up, camera. */
 
 import { AudioBus } from "./audio.js";
-import { applyFx, drawStrip, fx } from "./fxart.js";
+import { applyFx, drawStrip, FX, fx } from "./fxart.js";
+import { BossUI } from "./ui/boss.js";
 import {
   CENSER_DAMAGE_STEP,
   CENSER_MAX_DAMAGE,
@@ -45,6 +46,11 @@ export const ELITE_INTERVAL = 120;
 export const WARDEN_HP_MULT = 1.5;
 /** Surviving this long ends the night. */
 export const DAWN_TIME = 600;
+/** The Vampire Lord replaces the warden that used to arrive at 580s. */
+export const LORD_TIME = 540;
+/** Warning banner length. He lands when this elapses. Matches BossUI. */
+export const LORD_ENTRANCE = 1.6;
+export const SUPPRESSED_WARDEN_TIME = 580;
 const HASTE_FLOOR = 0.25;
 const CAP_AT_4 = 4 * 60;
 const CAP_AT_6 = 6 * 60;
@@ -500,7 +506,7 @@ export class Game {
     this.sprites = {
       player: null,
       tileset: null,
-      enemies: { bat: null, shambler: null, brute: null },
+      enemies: { bat: null, shambler: null, brute: null, lord: null },
     };
     this.dpr = 1;
     this.viewW = 800;
@@ -514,6 +520,7 @@ export class Game {
     this.fpsWindowStart = null;
     this.characterId = null;
     this.select = null;
+    FX.onBoss = (name) => this.onBossFx(name);
     this.resetWorld();
     this.state = "menu";
   }
@@ -523,10 +530,16 @@ export class Game {
     this.art = art;
     this.sprites.player = art?.playerImage || null;
     this.sprites.tileset = art?.tilesetImage || null;
+    const lord = art?.enemies?.lord;
     this.sprites.enemies = {
       bat: art?.enemies?.bat?.image || null,
       shambler: art?.enemies?.shambler?.image || null,
       brute: art?.enemies?.brute?.image || null,
+      lord: {
+        walk: lord?.walk?.image || null,
+        cast: lord?.cast?.image || null,
+        dash: lord?.dash?.image || null,
+      },
     };
     bindEnemyArt(art?.enemies);
     applyFx(art?.fx);
@@ -555,7 +568,26 @@ export class Game {
     this.eliteState = "idle";
     this.eliteWarning = null;
     this.wardenAppearances = 0;
+    this.lordState = "idle";
+    this.lordSlain = false;
+    this.lordEntrance = 0;
+    this.lordLandFlash = 0;
     this.swarmsSeen = new Set();
+    this.omen = "";
+    this.omenTimer = 0;
+  }
+
+  /** QA hook. Stands one second before the lord, and does not replay earlier wardens. */
+  debugJumpToLord() {
+    this.time = LORD_TIME - 1;
+    this.wardenAppearances = 4;
+    this.eliteWarning = null;
+    if (this.eliteState !== "alive") this.eliteState = "idle";
+    this.lordState = "idle";
+    this.lordSlain = false;
+    this.lordEntrance = 0;
+    this.lordLandFlash = 0;
+    this.enemies = this.enemies.filter((enemy) => enemy.type !== "lord");
     this.omen = "";
     this.omenTimer = 0;
   }
@@ -563,7 +595,7 @@ export class Game {
   togglePerf() {
     this.showPerf = !this.showPerf;
     this.ui.setPerfVisible(this.showPerf);
-    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length);
+    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length, this.lordEnemy());
   }
 
   sampleFps(ts) {
@@ -595,6 +627,8 @@ export class Game {
   start(characterId) {
     this.characterId = characterById(characterId ?? this.characterId).id;
     this.resetWorld();
+    const live = this.player.art?.playerImage;
+    if (live) this.sprites.player = live;
     this.state = "playing";
     for (let i = 0; i < 4; i += 1) this.spawnAround("shambler");
     this.ui.setMode("playing");
@@ -622,7 +656,7 @@ export class Game {
     if (this.state === "playing") this.update(dt);
     else if (this.state === "select") this.select?.paint(this.anim);
     this.draw();
-    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length);
+    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length, this.lordEnemy());
     if (this.state === "playing" || this.state === "levelup") this.ui.updateHUD(this);
     requestAnimationFrame((next) => this.frame(next));
   }
@@ -632,6 +666,7 @@ export class Game {
     this.maybeSwarm();
     this.maybeElite();
     this.updateElite(dt);
+    this.updateLord(dt);
     this.player.update(dt, this.input.axis());
     this.trackAim();
     this.pruneFarEnemies();
@@ -693,7 +728,7 @@ export class Game {
     const py = this.player.y;
     for (let i = 0; i < this.enemies.length; i += 1) {
       const enemy = this.enemies[i];
-      if (enemy.type === "warden" || enemy.swarm) continue;
+      if (enemy.type === "warden" || enemy.type === "lord" || enemy.swarm) continue;
       const dist = (enemy.x - px) ** 2 + (enemy.y - py) ** 2;
       if (dist > farDist) {
         farDist = dist;
@@ -818,7 +853,9 @@ export class Game {
     const px = this.player.x;
     const py = this.player.y;
     this.enemies = this.enemies.filter((enemy) => (
-      enemy.type === "warden" || (enemy.x - px) ** 2 + (enemy.y - py) ** 2 <= limit2
+      enemy.type === "warden"
+      || enemy.type === "lord"
+      || (enemy.x - px) ** 2 + (enemy.y - py) ** 2 <= limit2
     ));
   }
 
@@ -1008,6 +1045,8 @@ export class Game {
   }
 
   maybeElite() {
+    this.consumeSuppressedWarden();
+    this.maybeLord();
     if (this.eliteState === "warning" || this.eliteState === "alive") return;
     if (!eliteDue(this.time, this.kills, this.wardenAppearances)) return;
     const angle = Math.random() * Math.PI * 2;
@@ -1035,6 +1074,87 @@ export class Game {
     }
   }
 
+  /** Appearance 4 is the old 580s warden. Consume that slot and do not spawn it. */
+  consumeSuppressedWarden() {
+    if (this.eliteState === "warning" || this.eliteState === "alive") return;
+    if (this.wardenAppearances <= 0) return;
+    const due = ELITE_TIME + this.wardenAppearances * ELITE_INTERVAL;
+    if (due === SUPPRESSED_WARDEN_TIME && this.time >= due) this.wardenAppearances += 1;
+  }
+
+  maybeLord() {
+    if (this.lordState !== "idle" || this.lordSlain) return;
+    if (this.time < LORD_TIME) return;
+    this.lordState = "approaching";
+    this.lordEntrance = 0;
+    BossUI.announce("THE VAMPIRE LORD");
+  }
+
+  lordEnemy() {
+    for (let i = this.enemies.length - 1; i >= 0; i -= 1) {
+      const enemy = this.enemies[i];
+      if (enemy.type === "lord" && enemy.hp > 0) return enemy;
+    }
+    return null;
+  }
+
+  updateLord(dt) {
+    const lord = this.lordEnemy();
+    if (lord) BossUI.setHP(lord.hp, lord.maxHp);
+    BossUI.update(dt);
+    if (this.lordState === "approaching") {
+      this.lordEntrance += dt;
+      if (this.lordEntrance >= LORD_ENTRANCE) this.spawnLord();
+      return;
+    }
+    if (!lord) return;
+    lord.advanceLord(dt, this);
+  }
+
+  onBossFx(name) {
+    if (this.reduceMotion) return;
+    if (name === "lordLand") this.shake = Math.max(this.shake, 36);
+    else if (name === "lordDeath") this.shake = Math.max(this.shake, 28);
+  }
+
+  spawnLord() {
+    if (this.lordState === "alive" || this.lordEnemy()) {
+      this.lordState = "alive";
+      return;
+    }
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.min(this.viewW, this.viewH) * 0.42;
+    const lord = new Enemy(
+      "lord",
+      this.player.x + Math.cos(angle) * dist,
+      this.player.y + Math.sin(angle) * dist,
+      this.time,
+    );
+    this.enemies.push(lord);
+    this.lordState = "alive";
+    BossUI.land();
+    FX.boss("lordLand");
+    this.floaters.push(new Popup(lord.x, lord.y - 70, "VAMPIRE LORD", "#ffb4a8"));
+  }
+
+  /**
+   * The lord's bats spawn past the cap, the same as a swarm, so the crowd
+   * may go over 220. They count toward the cap afterwards.
+   */
+  spawnLordBats(count) {
+    const radius = 150;
+    const n = Math.max(0, count | 0);
+    for (let i = 0; i < n; i += 1) {
+      const angle = (i / n) * Math.PI * 2;
+      this.pushEnemy(
+        "bat",
+        this.player.x + Math.cos(angle) * radius,
+        this.player.y + Math.sin(angle) * radius,
+        true,
+      );
+    }
+  }
+
   spawnWarden() {
     const spot = this.eliteWarning;
     if (!spot || this.eliteState !== "warning") return;
@@ -1051,12 +1171,16 @@ export class Game {
   resolvePulses() {
     const player = this.player;
     for (const enemy of this.enemies) {
-      const pulse = enemy.pulse;
-      if (!pulse) continue;
+      const pulses = [];
+      if (enemy.pulse) pulses.push(enemy.pulse);
+      if (Array.isArray(enemy.pulses)) pulses.push(...enemy.pulses);
       enemy.pulse = null;
-      const dist = Math.hypot(player.x - pulse.x, player.y - pulse.y);
-      if (dist > pulse.radius + player.radius || player.invuln > 0) continue;
-      this.hurt(pulse.damage);
+      if (enemy.pulses) enemy.pulses.length = 0;
+      for (const pulse of pulses) {
+        const dist = Math.hypot(player.x - pulse.x, player.y - pulse.y);
+        if (dist > pulse.radius + player.radius || player.invuln > 0) continue;
+        this.hurt(pulse.damage);
+      }
     }
   }
 
@@ -1134,10 +1258,17 @@ export class Game {
         this.omen = "The Warden falls";
         this.omenTimer = 2.4;
         this.dropWardenHoard(enemy);
+      } else if (enemy.type === "lord") {
+        this.lordState = "slain";
+        this.lordSlain = true;
+        BossUI.defeated();
+        FX.boss("lordDeath");
+        this.omen = "The Vampire Lord falls";
+        this.omenTimer = 2.4;
       } else {
         this.gems.push(new Gem(enemy.x, enemy.y, enemy.xp));
       }
-      const sparks = enemy.type === "warden" ? 18 : 7;
+      const sparks = enemy.type === "warden" || enemy.type === "lord" ? 18 : 7;
       for (let i = 0; i < sparks; i += 1) {
         const color = enemy.type === "warden" && i % 2 === 0 ? "#f2e2a0" : enemy.color;
         this.particles.push(new Spark(enemy.x, enemy.y, color));
@@ -1206,9 +1337,11 @@ export class Game {
       const ny = dy / dist;
       player.x += nx * overlap * 0.8;
       player.y += ny * overlap * 0.8;
-      enemy.x -= nx * overlap * 0.45;
-      enemy.y -= ny * overlap * 0.45;
-      if (player.invuln <= 0) this.hurt(enemy.damage);
+      if (!enemy.knockbackImmune) {
+        enemy.x -= nx * overlap * 0.45;
+        enemy.y -= ny * overlap * 0.45;
+      }
+      if (player.invuln <= 0) this.hurt(enemy.contactDamage ? enemy.contactDamage() : enemy.damage);
     }
   }
 
@@ -1231,10 +1364,19 @@ export class Game {
         const push = (min - dist) / 2;
         const nx = dx / dist;
         const ny = dy / dist;
-        a.x -= nx * push;
-        a.y -= ny * push;
-        b.x += nx * push;
-        b.y += ny * push;
+        if (a.knockbackImmune && b.knockbackImmune) continue;
+        if (a.knockbackImmune) {
+          b.x += nx * push * 2;
+          b.y += ny * push * 2;
+        } else if (b.knockbackImmune) {
+          a.x -= nx * push * 2;
+          a.y -= ny * push * 2;
+        } else {
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+        }
       }
     }
   }
@@ -1268,25 +1410,34 @@ export class Game {
       this.openLevelUp();
       return;
     }
-    if (this.time >= DAWN_TIME) this.enterVictory();
+    if (this.lordSlain) {
+      this.enterVictory("lord");
+      return;
+    }
+    if (this.time >= DAWN_TIME) this.enterVictory("dawn");
   }
 
-  /** Back to the night. Dawn is checked here, after any open level-up cards. */
+  /** Back to the night. A slain lord, then dawn, after any open level-up cards. */
   resumePlay() {
     this.state = "playing";
     this.ui.setMode("playing");
-    if (this.player.hp > 0 && this.time >= DAWN_TIME) this.enterVictory();
+    if (this.player.hp <= 0) return;
+    if (this.lordSlain) this.enterVictory("lord");
+    else if (this.time >= DAWN_TIME) this.enterVictory("dawn");
   }
 
-  enterVictory() {
+  enterVictory(kind) {
     if (this.state === "victory") return;
     this.state = "victory";
     this.pendingLevels = 0;
     this.currentChoices = [];
+    const lord = kind === "lord";
     this.ui.showDawn({
       time: this.time,
       kills: this.kills,
       level: this.player.level,
+      title: lord ? "Lord slain" : "Dawn breaks — the Lord escapes",
+      gold: lord,
     });
   }
 
@@ -1360,6 +1511,7 @@ export class Game {
     for (const pool of this.pools) pool.draw(ctx, this.anim);
     this.drawEliteWarning(ctx);
     this.drawWardenMarks(ctx);
+    this.drawLordDash(ctx);
     this.drawMagnetReach(ctx);
     for (const gem of this.gems) gem.draw(ctx);
     for (const spark of this.particles) spark.draw(ctx);
@@ -1374,6 +1526,7 @@ export class Game {
     for (const popup of this.floaters) popup.draw(ctx);
     ctx.restore();
     this.drawVignette(ctx, w, h);
+    BossUI.draw(ctx, w, h);
   }
 
   drawMagnetReach(ctx) {
@@ -1456,28 +1609,55 @@ export class Game {
     ctx.restore();
   }
 
+  drawMarkCircle(ctx, mark, winding, t) {
+    ctx.save();
+    ctx.translate(mark.x, mark.y);
+    ctx.fillStyle = winding
+      ? `rgba(160, 16, 28, ${0.08 + 0.22 * t})`
+      : "rgba(255, 180, 120, 0.28)";
+    ctx.beginPath();
+    ctx.arc(0, 0, mark.radius * (winding ? Math.max(0.2, t) : 1), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = winding
+      ? `rgba(255, 70, 54, ${0.4 + 0.55 * t})`
+      : "rgba(255, 226, 190, 0.9)";
+    ctx.lineWidth = winding ? 2 + t * 3 : 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, mark.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   drawWardenMarks(ctx) {
     for (const enemy of this.enemies) {
-      if (enemy.type !== "warden" || !enemy.mark) continue;
-      const mark = enemy.mark;
-      const winding = enemy.phase === "windup" && enemy.windupMax > 0;
-      const t = winding ? 1 - enemy.windup / enemy.windupMax : 1;
-      ctx.save();
-      ctx.translate(mark.x, mark.y);
-      ctx.fillStyle = winding
-        ? `rgba(160, 16, 28, ${0.08 + 0.22 * t})`
-        : "rgba(255, 180, 120, 0.28)";
-      ctx.beginPath();
-      ctx.arc(0, 0, mark.radius * (winding ? Math.max(0.2, t) : 1), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = winding
-        ? `rgba(255, 70, 54, ${0.4 + 0.55 * t})`
-        : "rgba(255, 226, 190, 0.9)";
-      ctx.lineWidth = winding ? 2 + t * 3 : 4;
-      ctx.beginPath();
-      ctx.arc(0, 0, mark.radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      if (enemy.type === "warden" && enemy.mark) {
+        const winding = enemy.phase === "windup" && enemy.windupMax > 0;
+        const t = winding ? 1 - enemy.windup / enemy.windupMax : 1;
+        this.drawMarkCircle(ctx, enemy.mark, winding, t);
+      }
+      if (enemy.type === "lord" && enemy.marks) {
+        for (const mark of enemy.marks) {
+          const winding = mark.burst <= 0 && mark.windupMax > 0;
+          const t = winding ? 1 - mark.windup / mark.windupMax : 1;
+          this.drawMarkCircle(ctx, mark, winding, Math.max(0, Math.min(1, t)));
+        }
+      }
+    }
+  }
+
+  drawLordDash(ctx) {
+    for (const enemy of this.enemies) {
+      if (enemy.type !== "lord" || enemy.dash?.phase !== "line") continue;
+      const dash = enemy.dash;
+      const t01 = dash.duration > 0 ? Math.max(0, Math.min(1, dash.time / dash.duration)) : 0;
+      BossUI.drawDashLine(
+        ctx,
+        enemy.x,
+        enemy.y,
+        enemy.x + dash.dx * dash.distance,
+        enemy.y + dash.dy * dash.distance,
+        t01,
+      );
     }
   }
 

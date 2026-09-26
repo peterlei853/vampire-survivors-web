@@ -1,0 +1,34 @@
+{
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "rows": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+  ],
+  "columns": [
+    "idle",
+    "walk0",
+    "walk1",
+    "walk2",
+    "walk3",
+    "walk4",
+    "walk5"
+  ],
+  "walkFrames": 6,
+  "bodyBox": {
+    "x": 18,
+    "y": 7,
+    "w": 28,
+    "h": 53
+  },
+  "note": "row = facing direction, col 0 = idle rotation, cols 1-6 = walk cycle; bodyBox = union of opaque pixels over all frames",
+  "type": "player",
+  "source": "PixelLab: nightfall-vampire-hunter-64 a400f160-2060-4454-9c7c-46c22dd72e02 (64x64 canvas, v3 re-render of 324fc73a)",
+  "edits": "south walk4-6 are horizontal mirrors of walk1-3 (PixelLab south walk turned to a back view in its last 3 frames)"
+}

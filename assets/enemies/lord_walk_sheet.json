@@ -1,0 +1,25 @@
+{
+  "type": "lord",
+  "source": "PixelLab: vampire-lord",
+  "frameWidth": 128,
+  "frameHeight": 128,
+  "rows": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+  ],
+  "frames": 6,
+  "walkFrames": 6,
+  "bodyBox": {
+    "x": 30,
+    "y": 13,
+    "w": 64,
+    "h": 101
+  },
+  "animation": "walk"
+}

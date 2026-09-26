@@ -128,10 +128,12 @@ export function createSelect(game, begin) {
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!sheet?.image) continue;
+      canvas.dataset.sheet = sheet.image.currentSrc || sheet.image.src;
       const frameW = sheet.frameWidth;
       const frameH = sheet.frameHeight;
       const row = Math.max(0, (sheet.rows || []).indexOf("south"));
-      const col = 1 + (Math.floor(time * WALK_FPS) % (sheet.walkFrames || 6));
+      const frames = sheet.walkFrames >= 1 ? sheet.walkFrames : 1;
+      const col = 1 + (Math.floor(time * WALK_FPS) % frames);
       const scale = Math.min(canvas.width / frameW, canvas.height / frameH);
       const drawW = frameW * scale;
       const drawH = frameH * scale;

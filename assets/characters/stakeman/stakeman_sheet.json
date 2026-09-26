@@ -1,0 +1,31 @@
+{
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "rows": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+  ],
+  "columns": [
+    "idle",
+    "walk0",
+    "walk1",
+    "walk2",
+    "walk3",
+    "walk4",
+    "walk5"
+  ],
+  "walkFrames": 6,
+  "note": "row = facing direction, col 0 = idle rotation, cols 1-6 = walk cycle",
+  "bodyBox": {
+    "x": 20,
+    "y": 6,
+    "w": 24,
+    "h": 50
+  }
+}

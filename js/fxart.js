@@ -49,6 +49,17 @@ export function applyFx(pack) {
   }
 }
 
+/**
+ * Boss cues. `lordLand` fires when the Vampire Lord touches down, `lordDeath`
+ * when he is slain. The game registers `onBoss` to shake the screen.
+ */
+export const FX = {
+  onBoss: null,
+  boss(name) {
+    if (typeof FX.onBoss === "function") FX.onBoss(name);
+  },
+};
+
 /** Horizontal strip. `frame` may be fractional; the index is floored. Returns false if there is no image. */
 export function drawStrip(ctx, image, frames, frame, draw, angle = 0) {
   if (!image || frames <= 0 || image.naturalWidth <= 0) return false;

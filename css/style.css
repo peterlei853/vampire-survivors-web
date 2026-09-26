@@ -283,6 +283,18 @@ canvas {
   font-size: 12px;
 }
 
+.win-banner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--gold);
+  color: #1a1208;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 h1, h2 {
   margin: 0;
   font-weight: 600;

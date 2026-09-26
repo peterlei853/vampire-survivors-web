@@ -32,7 +32,7 @@ async function beginNight(page) {
 
 test("loads the menu with no console errors", async ({ page }) => {
   await bootMenu(page);
-  await expect(page).toHaveTitle(/Nightfall — v0\.5\.2/);
+  await expect(page).toHaveTitle(/Nightfall — v0\.6/);
   await expect(page.locator("#overlay-start")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
 
@@ -440,11 +440,14 @@ test("the player sprite loads and facing follows left and right", async ({ page 
       loaded: Boolean(image && image.complete && image.naturalWidth > 0),
       width: image ? image.naturalWidth : 0,
       height: image ? image.naturalHeight : 0,
+      src: image ? (image.currentSrc || image.src) : "",
     };
   });
   expect(sheet.loaded).toBe(true);
-  expect(sheet.width).toBe(476);
-  expect(sheet.height).toBe(544);
+  expect(sheet.width).toBe(448);
+  expect(sheet.height).toBe(512);
+  expect(sheet.src).toContain("/characters/hunter/hunter_sheet.png");
+  expect(sheet.src).not.toContain("player_sheet");
 
   await beginNight(page);
   await page.keyboard.down("d");
@@ -460,34 +463,92 @@ test("the player sprite loads and facing follows left and right", async ({ page 
   expect(await page.evaluate(() => window.__game.player.facing)).toBe("west");
 });
 
+test("each character's card and sprite share a sheet, and player_sheet is never requested", async ({ page }) => {
+  const playerSheetHits = [];
+  page.on("request", (request) => {
+    if (request.url().includes("player_sheet")) playerSheetHits.push(request.url());
+  });
+  await bootMenu(page);
+  await page.getByRole("button", { name: "Begin the night" }).click();
+  await page.waitForFunction(() => {
+    const hunter = document.querySelector('[data-character="hunter"] canvas');
+    const stakeman = document.querySelector('[data-character="warden_hunter"] canvas');
+    return Boolean(hunter?.dataset.sheet && stakeman?.dataset.sheet);
+  });
+  const previews = await page.evaluate(() => ({
+    hunter: document.querySelector('[data-character="hunter"] canvas').dataset.sheet,
+    warden_hunter: document.querySelector('[data-character="warden_hunter"] canvas').dataset.sheet,
+  }));
+  expect(previews.hunter).toContain("/characters/hunter/hunter_sheet.png");
+  expect(previews.warden_hunter).toContain("/characters/stakeman/stakeman_sheet.png");
+
+  for (const id of ["hunter", "warden_hunter"]) {
+    await page.evaluate((characterId) => window.__begin(characterId), id);
+    await page.waitForFunction(
+      (characterId) => window.__game.state === "playing" && window.__game.player.characterId === characterId,
+      id,
+    );
+    const played = await page.evaluate(() => {
+      const image = window.__game.player.art?.playerImage;
+      const live = window.__game.sprites.player;
+      return {
+        sprite: image ? (image.currentSrc || image.src) : "",
+        handle: live ? (live.currentSrc || live.src) : "",
+      };
+    });
+    expect(played.sprite).toBe(previews[id]);
+    expect(played.handle).toBe(previews[id]);
+  }
+  expect(playerSheetHits).toEqual([]);
+});
+
 test("enemy sheets and the graveyard tileset load", async ({ page }) => {
   await bootMenu(page);
-  const art = await page.evaluate(() => {
+  const art = await page.evaluate(async () => {
     const game = window.__game;
     const size = (image) => (image && image.complete && image.naturalWidth > 0
       ? { width: image.naturalWidth, height: image.naturalHeight, src: image.currentSrc || image.src }
       : null);
+    const matchesJson = async (sheet) => {
+      const image = sheet?.image;
+      if (!image || !image.complete || !(image.naturalWidth > 0)) return null;
+      const src = image.currentSrc || image.src;
+      const meta = await fetch(src.replace(/\.png(\?.*)?$/, ".json")).then((response) => response.json());
+      const raw = meta.walkFrames ?? meta.frames;
+      const frames = Number.isFinite(Number(raw)) && Number(raw) >= 1 ? Math.floor(Number(raw)) : 1;
+      return {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        expectW: meta.frameWidth * frames,
+        expectH: meta.frameHeight * 8,
+        src,
+        frameWidth: sheet.frameWidth,
+        walkFrames: sheet.walkFrames,
+      };
+    };
+    const enemies = game.art?.enemies || {};
     return {
       kind: game.art?.tilesetKind || null,
       tileset: size(game.sprites.tileset),
-      bat: size(game.sprites.enemies?.bat),
-      shambler: size(game.sprites.enemies?.shambler),
-      brute: size(game.sprites.enemies?.brute),
+      bat: await matchesJson(enemies.bat),
+      shambler: await matchesJson(enemies.shambler),
+      brute: await matchesJson(enemies.brute),
+      lordWalk: await matchesJson(enemies.lord?.walk),
+      lordCast: await matchesJson(enemies.lord?.cast),
+      lordDash: await matchesJson(enemies.lord?.dash),
     };
   });
   expect(art.kind).toBe("graveyard");
   expect(art.tileset?.src || "").toContain("tileset_graveyard.png");
   expect(art.tileset.width).toBe(128);
   expect(art.tileset.height).toBe(128);
-  expect(art.bat.width).toBe(68);
-  expect(art.bat.height).toBe(544);
-  expect(art.bat.src).toContain("bat_sheet.png");
-  expect(art.shambler.width).toBe(92);
-  expect(art.shambler.height).toBe(736);
-  expect(art.shambler.src).toContain("shambler_sheet.png");
-  expect(art.brute.width).toBe(104);
-  expect(art.brute.height).toBe(832);
-  expect(art.brute.src).toContain("brute_sheet.png");
+  for (const key of ["bat", "shambler", "brute", "lordWalk", "lordCast", "lordDash"]) {
+    expect(art[key], key).toBeTruthy();
+    expect(art[key].width, key).toBe(art[key].expectW);
+    expect(art[key].height, key).toBe(art[key].expectH);
+    expect(art[key].frameWidth * art[key].walkFrames, key).toBe(art[key].width);
+    expect(art[key].src).toContain("_sheet.png");
+  }
 
   await beginNight(page);
   const crowd = await page.evaluate(() => {
@@ -552,7 +613,7 @@ async function expectFreshNight(page) {
 
 test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async ({ page }) => {
   const problems = await bootMenu(page);
-  await expect(page.locator(".version")).toHaveText("v0.5.2");
+  await expect(page.locator(".version")).toHaveText("v0.6");
   await expect(page.locator("#perf")).toBeHidden();
 
   await page.keyboard.press("F3");
@@ -790,7 +851,7 @@ test("v0.5.1 tuning, swarms, warden return, dawn, and the perf overlay", async (
     const warden = window.__game.enemies.find((enemy) => enemy.type === "warden");
     return warden ? warden.hp : 0;
   })).toBeGreaterThan(0);
-  await expect(page.getByRole("heading", { name: "Dawn breaks" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
   await expect(page.locator("#overlay-win")).toBeVisible();
   await expect(page.locator("#hud")).toBeHidden();
   const rows = await page.locator("#win-summary dd").allTextContents();
@@ -875,6 +936,7 @@ test("begin(characterId) applies each hunter, and boons scale from that base", a
     game.applyUpgrade("speed");
     game.applyUpgrade("pierce");
     const sheet = game.art.characters.warden_hunter;
+    const image = sheet?.image;
     return {
       base,
       damage: game.player.damage,
@@ -882,10 +944,13 @@ test("begin(characterId) applies each hunter, and boons scale from that base", a
       speed: game.player.speed,
       pierce: game.player.pierce,
       art: {
-        ready: Boolean(sheet && sheet.image),
+        ready: Boolean(sheet && image),
         fallback: Boolean(sheet && sheet.fallback),
         frameWidth: sheet ? sheet.frameWidth : 0,
         walkFrames: sheet ? sheet.walkFrames : 0,
+        columns: Array.isArray(sheet?.columns) ? sheet.columns.length : 0,
+        width: image ? image.naturalWidth || image.width : 0,
+        height: image ? image.naturalHeight || image.height : 0,
       },
     };
   });
@@ -904,12 +969,11 @@ test("begin(characterId) applies each hunter, and boons scale from that base", a
   expect(stakeman.speed).toBe(Math.min(400, Math.round(150 * 1.1)));
   expect(stakeman.pierce).toBe(2);
   expect(stakeman.art.ready).toBe(true);
-  if (stakeman.art.fallback) {
-    expect(stakeman.art.frameWidth).toBe(68);
-  } else {
-    expect(stakeman.art.frameWidth).toBe(80);
-    expect(stakeman.art.walkFrames).toBe(6);
-  }
+  expect(stakeman.art.fallback).toBe(false);
+  expect(stakeman.art.frameWidth).toBe(64);
+  expect(stakeman.art.walkFrames).toBe(6);
+  expect(stakeman.art.width).toBe(stakeman.art.frameWidth * stakeman.art.columns);
+  expect(stakeman.art.height).toBe(64 * 8);
 });
 
 test("a missing or invalid saved character falls back to the hunter", async ({ page }) => {
@@ -1014,4 +1078,287 @@ test("Rise again keeps the last character, and C returns to select", async ({ pa
     state: window.__game.state,
     time: window.__game.time,
   }))).toEqual({ state: "select", time: parked });
+});
+
+test("the brute collision radius stays 20", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  const brute = await page.evaluate(() => {
+    const game = window.__game;
+    const enemy = game.pushEnemy("brute", game.player.x + 240, game.player.y, false);
+    return {
+      radius: enemy.radius,
+      body: game.art.enemies.brute.bodyBox,
+    };
+  });
+  expect(brute.radius).toBe(20);
+  expect(brute.body).toEqual({ x: 1, y: 2, w: 60, h: 60 });
+});
+
+test("the vampire lord replaces the 580s warden", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  const spawned = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.debugJumpToLord();
+    const before = game.time;
+    game.time = 540;
+    game.maybeElite();
+    const approaching = game.lordState;
+    game.updateLord(1.6);
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    game.time = 580;
+    game.maybeElite();
+    return {
+      before,
+      approaching,
+      appearances: game.wardenAppearances,
+      elite: game.eliteState,
+      wardens: game.enemies.filter((enemy) => enemy.type === "warden").length,
+      hp: lord ? lord.hp : 0,
+      maxHp: lord ? lord.maxHp : 0,
+      speed: lord ? lord.speed : 0,
+      damage: lord ? lord.damage : 0,
+      radius: lord ? lord.radius : 0,
+      immune: lord ? lord.knockbackImmune : false,
+      phase: lord ? lord.lordPhase : 0,
+    };
+  });
+  expect(spawned.before).toBe(539);
+  expect(spawned.approaching).toBe("approaching");
+  expect(spawned.hp).toBe(5000);
+  expect(spawned.maxHp).toBe(5000);
+  expect(spawned.speed).toBe(55);
+  expect(spawned.damage).toBe(20);
+  expect(spawned.radius).toBe(34);
+  expect(spawned.immune).toBe(true);
+  expect(spawned.phase).toBe(1);
+  expect(spawned.wardens).toBe(0);
+  expect(spawned.appearances).toBe(5);
+  expect(spawned.elite).not.toBe("warning");
+
+  const phase = await page.evaluate(() => {
+    const game = window.__game;
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    lord.hp = 2500;
+    lord.markTimer = 30;
+    lord.dashTimer = 30;
+    lord.batTimer = 0;
+    lord.advanceLord(0.016, game);
+    const casting = lord.sheetAnim === "cast" && lord.cast?.kind === "bats" && lord.lordPhase === 2;
+    lord.cast.time = lord.cast.duration;
+    const before = game.enemies.filter((enemy) => enemy.type === "bat").length;
+    lord.advanceLord(0.016, game);
+    return {
+      casting,
+      phase: lord.lordPhase,
+      interval: lord.markInterval(),
+      bats: game.enemies.filter((enemy) => enemy.type === "bat").length - before,
+      dash: lord.dash && lord.dash.phase === "line" ? lord.dash.duration : 0,
+      distance: lord.dash ? lord.dash.distance : 0,
+    };
+  });
+  expect(phase.casting).toBe(true);
+  expect(phase.phase).toBe(2);
+  expect(phase.interval).toBe(4);
+  expect(phase.bats).toBe(12);
+  expect(phase.dash).toBe(1);
+  expect(phase.distance).toBe(400);
+
+  await page.evaluate(() => {
+    const game = window.__game;
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    lord.hp = 0;
+    game.pendingLevels = 0;
+    game.time = 200;
+    game.state = "playing";
+    game.reapEnemies();
+    game.finishFrame();
+  });
+  await expect(page.getByRole("heading", { name: "Lord slain" })).toBeVisible();
+  await expect(page.locator("#overlay-win")).toBeVisible();
+
+  await page.evaluate(() => window.__begin("hunter"));
+  await page.waitForFunction(() => window.__game.state === "playing" && window.__game.time < 1);
+  await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.wardenAppearances = 4;
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    game.time = 600;
+    game.pendingLevels = 0;
+    game.finishFrame();
+  });
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => {
+    const lord = window.__game.enemies.find((enemy) => enemy.type === "lord");
+    return lord ? lord.hp : 0;
+  })).toBe(5000);
+});
+
+test("dying at 9:30 and restarting clears the boss bar before 9:00", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  const fallen = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.debugJumpToLord();
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    game.time = 570;
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    game.player.hp = 0;
+    game.pendingLevels = 0;
+    return {
+      alive: Boolean(lord && lord.hp > 0),
+      active: window.BossUI.active,
+      time: game.time,
+    };
+  });
+  expect(fallen.alive).toBe(true);
+  expect(fallen.active).toBe(true);
+  expect(fallen.time).toBe(570);
+  await page.waitForFunction(() => window.__game.state === "gameover");
+  await page.getByRole("button", { name: "Rise again" }).click();
+  await page.waitForFunction(() => window.__game.state === "playing" && window.__game.time < 30);
+  const restarted = await page.evaluate(() => ({
+    active: window.BossUI.active,
+    time: window.__game.time,
+    lord: window.__game.enemies.some((enemy) => enemy.type === "lord"),
+  }));
+  expect(restarted.time).toBeLessThan(540);
+  expect(restarted.active).toBe(false);
+  expect(restarted.lord).toBe(false);
+});
+
+test("surviving to 10:00 says the Lord escapes", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+
+  const quiet = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.pendingLevels = 0;
+    game.time = 600;
+    game.finishFrame();
+    const banner = document.getElementById("win-banner");
+    return {
+      state: game.state,
+      title: document.getElementById("win-title").textContent,
+      bannerHidden: banner.classList.contains("hidden"),
+      lord: game.enemies.some((enemy) => enemy.type === "lord"),
+    };
+  });
+  expect(quiet.state).toBe("victory");
+  expect(quiet.lord).toBe(false);
+  expect(quiet.title).toBe("Dawn breaks — the Lord escapes");
+  expect(quiet.bannerHidden).toBe(true);
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
+  await expect(page.locator("#win-banner")).toBeHidden();
+
+  await page.evaluate(() => window.__begin("hunter"));
+  await page.waitForFunction(() => window.__game.state === "playing" && window.__game.time < 1);
+  const living = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.player.attackTimer = 10;
+    game.debugJumpToLord();
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    game.time = 600;
+    game.pendingLevels = 0;
+    game.finishFrame();
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    const banner = document.getElementById("win-banner");
+    return {
+      state: game.state,
+      title: document.getElementById("win-title").textContent,
+      bannerHidden: banner.classList.contains("hidden"),
+      hp: lord ? lord.hp : 0,
+    };
+  });
+  expect(living.state).toBe("victory");
+  expect(living.hp).toBe(5000);
+  expect(living.title).toBe("Dawn breaks — the Lord escapes");
+  expect(living.bannerHidden).toBe(true);
+  await expect(page.getByRole("heading", { name: "Dawn breaks — the Lord escapes", exact: true })).toBeVisible();
+  await expect(page.locator("#win-banner")).toBeHidden();
+});
+
+test("killing the Lord shows Lord slain on a gold banner", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.debugJumpToLord();
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    lord.hp = 0;
+    game.pendingLevels = 0;
+    game.time = 200;
+    game.state = "playing";
+    game.reapEnemies();
+    game.finishFrame();
+  });
+  await expect(page.getByRole("heading", { name: "Lord slain", exact: true })).toBeVisible();
+  const banner = page.locator("#win-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toHaveText("Lord slain");
+  expect(await banner.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgb(214, 181, 106)");
+  expect(await page.evaluate(() => window.__game.state)).toBe("victory");
+  await expect(page.locator("#overlay-win")).toBeVisible();
+});
+
+test("a 10:00 crowd at the 220 cap stays above 20 fps", async ({ page }) => {
+  const problems = await bootMenu(page);
+  await beginNight(page);
+  await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.maxHp = 100000;
+    game.player.invuln = 999;
+    game.spawnTimer = 999;
+    game.swarmsSeen.add("bats");
+    game.swarmsSeen.add("brutes");
+    game.swarmsSeen.add("mixed");
+    game.time = 590;
+    game.wardenAppearances = 4;
+    const target = 220;
+    while (game.enemies.length < target) {
+      const left = target - game.enemies.length;
+      game.spawnEdgeLine("bat", Math.min(30, left));
+      if (game.enemies.length < target) game.spawnRing("brute", Math.min(12, target - game.enemies.length));
+      if (game.enemies.length < target) game.spawnMixed(Math.min(40, target - game.enemies.length));
+    }
+  });
+  await page.keyboard.press("F3");
+  await page.waitForTimeout(2500);
+  const perf = await page.evaluate(() => ({
+    fps: window.__game.fps,
+    enemies: window.__game.enemies.length,
+    time: window.__game.time,
+    text: document.getElementById("perf").textContent,
+    state: window.__game.state,
+  }));
+  expect(perf.state).toBe("playing");
+  expect(perf.enemies).toBeGreaterThanOrEqual(220);
+  expect(perf.time).toBeGreaterThan(590);
+  expect(perf.time).toBeLessThan(600);
+  expect(perf.text).toContain("FPS");
+  expect(perf.fps).toBeGreaterThan(20);
+  expect(problems, problems.join("\n")).toEqual([]);
+  console.log(`10:00 soak: ${perf.text} (raw ${perf.fps.toFixed(1)}, enemies ${perf.enemies}, t ${perf.time.toFixed(1)})`);
 });

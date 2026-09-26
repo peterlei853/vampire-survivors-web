@@ -14,11 +14,14 @@ export const CHARACTERS = {
     pierce: 0,
     artKey: "hunter",
     sheet: {
-      frameWidth: 68,
-      frameHeight: 68,
+      frameWidth: 64,
+      frameHeight: 64,
       walkFrames: 6,
       files: [
-        { image: "assets/player_sheet.png", meta: "assets/player_sheet.json" },
+        {
+          image: "assets/characters/hunter/hunter_sheet.png",
+          meta: "assets/characters/hunter/hunter_sheet.json",
+        },
       ],
     },
   },
@@ -32,17 +35,15 @@ export const CHARACTERS = {
     attackInterval: 0.68,
     pierce: 1,
     artKey: "stakeman",
-    /** Same layout as the hunter. A missing file uses the hunter sheet, tinted darker. */
-    tintFallback: "hunter",
     sheet: {
-      /** Flip on once player_sheet.png is in the folder. Off avoids a 404 while the art is still out. */
-      ready: false,
-      frameWidth: 80,
-      frameHeight: 80,
+      frameWidth: 64,
+      frameHeight: 64,
       walkFrames: 6,
       files: [
-        { image: "assets/characters/stakeman/player_sheet.png", meta: "assets/characters/stakeman/player_sheet.json" },
-        { image: "assets/characters/stakeman/sheet.png", meta: "assets/characters/stakeman/sheet.json" },
+        {
+          image: "assets/characters/stakeman/stakeman_sheet.png",
+          meta: "assets/characters/stakeman/stakeman_sheet.json",
+        },
       ],
     },
   },

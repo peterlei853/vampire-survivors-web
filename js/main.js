@@ -5,6 +5,7 @@ import { readCharacterId, writeCharacterId } from "./characters.js";
 import { Game } from "./game.js";
 import { Input } from "./input.js";
 import { createSelect } from "./select.js";
+import { BossUI } from "./ui/boss.js";
 import { UI } from "./ui.js";
 
 const canvas = document.getElementById("game");
@@ -18,14 +19,15 @@ game.setArt(art);
 // Useful fields: state, time, kills, player (xp, level, facing, censer, pyre, cross),
 // enemies, eliteState, spawnInterval(), input.touch (stick visible / vector),
 // sprites.player (loaded sheet), sprites.tileset (graveyard floor, or the
-// older tileset if that image failed), sprites.enemies (bat, shambler, brute),
+// older tileset if that image failed), sprites.enemies (bat, shambler, brute, lord),
 // weaponSummary() (stake, censer, pyre, cross,
-// magnet, elite, threat), applyUpgrade(id), toggleMute().
+// magnet, elite, threat), applyUpgrade(id), toggleMute(), debugJumpToLord().
 // window.__begin(characterId) starts a run. Missing or unknown ids use the hunter.
 window.__game = game;
 ui.setMuted(game.audio.muted);
 
 function begin(characterId) {
+  BossUI.reset();
   const id = writeCharacterId(characterId || readCharacterId());
   game.audio.unlock();
   game.start(id);
@@ -41,6 +43,7 @@ const select = createSelect(game, begin);
 game.select = select;
 
 window.__begin = begin;
+window.BossUI = BossUI;
 
 document.getElementById("btn-start").addEventListener("click", openSelect);
 document.getElementById("btn-confirm").addEventListener("click", () => select.confirm());
