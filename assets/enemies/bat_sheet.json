@@ -1,8 +1,8 @@
 {
   "type": "bat",
-  "source": "PixelLab: fast-bat",
-  "frameWidth": 68,
-  "frameHeight": 68,
+  "source": "PixelLab: fast-bat-64 (fly-loop; west/south-west from fly-loop-retry; recolored lighter/warmer)",
+  "frameWidth": 64,
+  "frameHeight": 64,
   "rows": [
     "south",
     "south-east",
@@ -13,11 +13,11 @@
     "west",
     "south-west"
   ],
-  "walkFrames": 1,
+  "walkFrames": 6,
   "bodyBox": {
-    "x": 18,
-    "y": 7,
-    "w": 32,
-    "h": 50
+    "x": 13,
+    "y": 11,
+    "w": 40,
+    "h": 40
   }
 }

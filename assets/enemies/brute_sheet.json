@@ -1,8 +1,8 @@
 {
   "type": "brute",
-  "source": "PixelLab: high-health-skeleton",
-  "frameWidth": 104,
-  "frameHeight": 104,
+  "source": "PixelLab: high-health-skeleton-64 (walk-steady, skeleton-v3)",
+  "frameWidth": 64,
+  "frameHeight": 64,
   "rows": [
     "south",
     "south-east",
@@ -13,11 +13,11 @@
     "west",
     "south-west"
   ],
-  "walkFrames": 1,
+  "walkFrames": 6,
   "bodyBox": {
-    "x": 28,
-    "y": 14,
-    "w": 46,
-    "h": 73
+    "x": 1,
+    "y": 2,
+    "w": 60,
+    "h": 60
   }
 }
