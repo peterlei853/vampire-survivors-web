@@ -45,55 +45,6 @@ canvas {
 
 .hidden { display: none !important; }
 
-.lord-banner {
-  position: absolute;
-  z-index: 28;
-  top: 16%;
-  left: 0;
-  right: 0;
-  text-align: center;
-  pointer-events: none;
-  font-size: 22px;
-  letter-spacing: 0.18em;
-  color: #ffd2cc;
-  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.85);
-}
-
-.boss-bar {
-  position: absolute;
-  z-index: 28;
-  top: 10px;
-  left: 16%;
-  right: 16%;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: center;
-  pointer-events: none;
-}
-
-.boss-name, .boss-hp {
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #ffd2cc;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-}
-
-.boss-track {
-  height: 14px;
-  border: 1px solid rgba(255, 180, 168, 0.75);
-  background: rgba(8, 6, 10, 0.82);
-  overflow: hidden;
-}
-
-.boss-fill {
-  display: block;
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(#e15b55, #6e1020);
-}
-
 .perf {
   position: absolute;
   z-index: 30;

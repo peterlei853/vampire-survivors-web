@@ -1107,7 +1107,7 @@ test("the vampire lord replaces the 580s warden", async ({ page }) => {
     game.time = 540;
     game.maybeElite();
     const approaching = game.lordState;
-    game.updateLord(0.6);
+    game.updateLord(1.6);
     const lord = game.enemies.find((enemy) => enemy.type === "lord");
     game.time = 580;
     game.maybeElite();
@@ -1188,7 +1188,7 @@ test("the vampire lord replaces the 580s warden", async ({ page }) => {
     game.wardenAppearances = 4;
     game.time = 540;
     game.maybeElite();
-    game.updateLord(0.6);
+    game.updateLord(1.6);
     game.time = 600;
     game.pendingLevels = 0;
     game.finishFrame();
@@ -1198,6 +1198,43 @@ test("the vampire lord replaces the 580s warden", async ({ page }) => {
     const lord = window.__game.enemies.find((enemy) => enemy.type === "lord");
     return lord ? lord.hp : 0;
   })).toBe(5000);
+});
+
+test("dying at 9:30 and restarting clears the boss bar before 9:00", async ({ page }) => {
+  await bootMenu(page);
+  await beginNight(page);
+  const fallen = await page.evaluate(() => {
+    const game = window.__game;
+    game.player.hp = 100000;
+    game.player.invuln = 30;
+    game.debugJumpToLord();
+    game.time = 540;
+    game.maybeElite();
+    game.updateLord(1.6);
+    game.time = 570;
+    const lord = game.enemies.find((enemy) => enemy.type === "lord");
+    game.player.hp = 0;
+    game.pendingLevels = 0;
+    return {
+      alive: Boolean(lord && lord.hp > 0),
+      active: window.BossUI.active,
+      time: game.time,
+    };
+  });
+  expect(fallen.alive).toBe(true);
+  expect(fallen.active).toBe(true);
+  expect(fallen.time).toBe(570);
+  await page.waitForFunction(() => window.__game.state === "gameover");
+  await page.getByRole("button", { name: "Rise again" }).click();
+  await page.waitForFunction(() => window.__game.state === "playing" && window.__game.time < 30);
+  const restarted = await page.evaluate(() => ({
+    active: window.BossUI.active,
+    time: window.__game.time,
+    lord: window.__game.enemies.some((enemy) => enemy.type === "lord"),
+  }));
+  expect(restarted.time).toBeLessThan(540);
+  expect(restarted.active).toBe(false);
+  expect(restarted.lord).toBe(false);
 });
 
 test("a 10:00 crowd at the 220 cap stays above 20 fps", async ({ page }) => {

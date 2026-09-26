@@ -1,7 +1,8 @@
 /** World loop: spawn, chase, stake, censer, pyre, cross, warden, gems, level-up, camera. */
 
 import { AudioBus } from "./audio.js";
-import { applyFx, drawStrip, fx } from "./fxart.js";
+import { applyFx, drawStrip, FX, fx } from "./fxart.js";
+import { BossUI } from "./ui/boss.js";
 import {
   CENSER_DAMAGE_STEP,
   CENSER_MAX_DAMAGE,
@@ -47,6 +48,8 @@ export const WARDEN_HP_MULT = 1.5;
 export const DAWN_TIME = 600;
 /** The Vampire Lord replaces the warden that used to arrive at 580s. */
 export const LORD_TIME = 540;
+/** Warning banner length. He lands when this elapses. Matches BossUI. */
+export const LORD_ENTRANCE = 1.6;
 export const SUPPRESSED_WARDEN_TIME = 580;
 const HASTE_FLOOR = 0.25;
 const CAP_AT_4 = 4 * 60;
@@ -517,6 +520,7 @@ export class Game {
     this.fpsWindowStart = null;
     this.characterId = null;
     this.select = null;
+    FX.onBoss = (name) => this.onBossFx(name);
     this.resetWorld();
     this.state = "menu";
   }
@@ -1083,8 +1087,7 @@ export class Game {
     if (this.time < LORD_TIME) return;
     this.lordState = "approaching";
     this.lordEntrance = 0;
-    this.omen = "THE VAMPIRE LORD APPROACHES";
-    this.omenTimer = 3.2;
+    BossUI.announce("THE VAMPIRE LORD");
   }
 
   lordEnemy() {
@@ -1096,19 +1099,22 @@ export class Game {
   }
 
   updateLord(dt) {
-    if (this.lordLandFlash > 0) {
-      this.lordLandFlash = Math.max(0, this.lordLandFlash - dt / 0.45);
-    }
+    const lord = this.lordEnemy();
+    if (lord) BossUI.setHP(lord.hp, lord.maxHp);
+    BossUI.update(dt);
     if (this.lordState === "approaching") {
       this.lordEntrance += dt;
-      this.omen = "THE VAMPIRE LORD APPROACHES";
-      this.omenTimer = Math.max(this.omenTimer, 0.3);
-      if (this.lordEntrance >= 0.6) this.spawnLord();
+      if (this.lordEntrance >= LORD_ENTRANCE) this.spawnLord();
       return;
     }
-    const lord = this.lordEnemy();
     if (!lord) return;
     lord.advanceLord(dt, this);
+  }
+
+  onBossFx(name) {
+    if (this.reduceMotion) return;
+    if (name === "lordLand") this.shake = Math.max(this.shake, 36);
+    else if (name === "lordDeath") this.shake = Math.max(this.shake, 28);
   }
 
   spawnLord() {
@@ -1126,10 +1132,8 @@ export class Game {
     );
     this.enemies.push(lord);
     this.lordState = "alive";
-    this.lordLandFlash = 1;
-    this.omen = "The Vampire Lord is here";
-    this.omenTimer = 2.4;
-    if (!this.reduceMotion) this.shake = 36;
+    BossUI.land();
+    FX.boss("lordLand");
     this.floaters.push(new Popup(lord.x, lord.y - 70, "VAMPIRE LORD", "#ffb4a8"));
   }
 
@@ -1254,7 +1258,8 @@ export class Game {
       } else if (enemy.type === "lord") {
         this.lordState = "slain";
         this.lordSlain = true;
-        this.lordLandFlash = 0;
+        BossUI.defeated();
+        FX.boss("lordDeath");
         this.omen = "The Vampire Lord falls";
         this.omenTimer = 2.4;
       } else {
@@ -1517,6 +1522,7 @@ export class Game {
     for (const popup of this.floaters) popup.draw(ctx);
     ctx.restore();
     this.drawVignette(ctx, w, h);
+    BossUI.draw(ctx, w, h);
   }
 
   drawMagnetReach(ctx) {
@@ -1639,16 +1645,15 @@ export class Game {
     for (const enemy of this.enemies) {
       if (enemy.type !== "lord" || enemy.dash?.phase !== "line") continue;
       const dash = enemy.dash;
-      const len = dash.distance;
-      ctx.save();
-      ctx.strokeStyle = "rgba(255, 48, 42, 0.9)";
-      ctx.lineWidth = 4;
-      ctx.setLineDash([10, 8]);
-      ctx.beginPath();
-      ctx.moveTo(enemy.x, enemy.y);
-      ctx.lineTo(enemy.x + dash.dx * len, enemy.y + dash.dy * len);
-      ctx.stroke();
-      ctx.restore();
+      const t01 = dash.duration > 0 ? Math.max(0, Math.min(1, dash.time / dash.duration)) : 0;
+      BossUI.drawDashLine(
+        ctx,
+        enemy.x,
+        enemy.y,
+        enemy.x + dash.dx * dash.distance,
+        enemy.y + dash.dy * dash.distance,
+        t01,
+      );
     }
   }
 
@@ -1662,14 +1667,6 @@ export class Game {
     if (this.eliteState === "warning" && this.eliteWarning) {
       const pulse = 0.5 + 0.5 * Math.sin(this.eliteWarning.time * 10);
       ctx.fillStyle = `rgba(120, 16, 24, ${0.06 + pulse * 0.1})`;
-      ctx.fillRect(0, 0, w, h);
-    }
-    if (this.lordState === "approaching") {
-      const t = Math.max(0, Math.min(1, this.lordEntrance / 0.6));
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.4 * t})`;
-      ctx.fillRect(0, 0, w, h);
-    } else if (this.lordLandFlash > 0) {
-      ctx.fillStyle = `rgba(0, 0, 0, ${0.4 * this.lordLandFlash})`;
       ctx.fillRect(0, 0, w, h);
     }
     if (this.hurtFlash > 0) {
