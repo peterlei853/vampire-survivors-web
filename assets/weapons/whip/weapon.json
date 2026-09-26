@@ -1,0 +1,29 @@
+{
+  "id": "whip",
+  "name": "Chain Whip",
+  "slug": "chain_whip",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "slash.png",
+      "role": "slash",
+      "frameWidth": 78,
+      "frameHeight": 32,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "east",
+      "primary": true,
+      "description": "horizontal chain lash with white crescent slash smear (stretch horizontally to 150-230px in engine)"
+    }
+  ]
+}

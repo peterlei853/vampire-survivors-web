@@ -1,0 +1,29 @@
+{
+  "id": "tome",
+  "name": "Bat Tome",
+  "slug": "bat_tome",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "projectile.png",
+      "role": "projectile",
+      "frameWidth": 56,
+      "frameHeight": 54,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "east",
+      "primary": true,
+      "description": "swarm of 4 purple bats flapping"
+    }
+  ]
+}

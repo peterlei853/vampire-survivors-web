@@ -1,0 +1,29 @@
+{
+  "id": "scythe",
+  "name": "Scythe",
+  "slug": "scythe",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "projectile.png",
+      "role": "projectile",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "none",
+      "primary": true,
+      "description": "scythe spinning 360 deg with dark purple energy"
+    }
+  ]
+}

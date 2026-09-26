@@ -1,0 +1,29 @@
+{
+  "id": "crossbow",
+  "name": "Crossbow",
+  "slug": "crossbow",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "projectile.png",
+      "role": "projectile",
+      "frameWidth": 54,
+      "frameHeight": 32,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "east",
+      "primary": true,
+      "description": "silver crossbow bolt with shimmering blue light particles"
+    }
+  ]
+}
