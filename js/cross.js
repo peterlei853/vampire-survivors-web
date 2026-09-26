@@ -1,6 +1,7 @@
-/** Ash Cross: a thrown cross that flies out, then returns, and cuts on both passes. */
+/** Cross Boomerang: flies out, then returns, and cuts on both passes. Internal id stays `cross`. */
 
 import { drawStrip, fx } from "./fxart.js";
+import { drawWeapon, hasWeapon } from "./weaponart.js";
 
 export const CROSS_MAX_COUNT = 3;
 export const CROSS_MAX_DAMAGE = 22;
@@ -58,6 +59,7 @@ export class AshBolt {
     this.returning = false;
     this.radius = 13;
     this.life = 3.2;
+    this.age = 0;
     this.cool = new Map();
   }
 
@@ -68,6 +70,7 @@ export class AshBolt {
       else this.cool.set(id, next);
     }
     this.spin += dt * 9;
+    this.age += dt;
     const step = this.speed * dt;
     if (!this.returning) {
       this.x += Math.cos(this.angle) * step;
@@ -97,6 +100,14 @@ export class AshBolt {
   }
 
   draw(ctx) {
+    if (hasWeapon("cross", "projectile")) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.imageSmoothingEnabled = false;
+      drawWeapon(ctx, "cross", "projectile", this.age, 0, 68, 104);
+      ctx.restore();
+      return;
+    }
     if (fx.cross) {
       ctx.save();
       ctx.translate(this.x, this.y);

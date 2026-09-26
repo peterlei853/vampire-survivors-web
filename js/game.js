@@ -1,6 +1,15 @@
-/** World loop: spawn, chase, stake, censer, pyre, cross, warden, gems, level-up, camera. */
+/** World loop: spawn, chase, weapons, warden, gems, level-up, camera. */
 
+import {
+  Bat,
+  FALLBACKS,
+  ownedWeaponCount,
+  roomForWeapon,
+  WEAPON_CAP,
+  weaponUpgrades,
+} from "./armory.js";
 import { AudioBus } from "./audio.js";
+import { FX } from "./fx/hits.js";
 import { applyFx, drawStrip, fx } from "./fxart.js";
 import {
   CENSER_DAMAGE_STEP,
@@ -17,7 +26,8 @@ import {
   CROSS_RANGE_STEP,
   AshBolt,
 } from "./cross.js";
-import { Enemy } from "./enemy.js";
+import { characterById } from "./characters.js";
+import { bindEnemyArt, Enemy } from "./enemy.js";
 import { Gem } from "./gem.js";
 import { MAGNET_MAX, MAGNET_STEP, Player } from "./player.js";
 import { Projectile } from "./projectile.js";
@@ -35,11 +45,28 @@ import {
 export const ELITE_MIN_TIME = 90;
 /** Quiet runs meet the warden here, still inside the 90–120s window. */
 export const ELITE_TIME = 100;
-/** A kill-heavy run can meet it as soon as the window opens. */
+/** A kill-heavy run can meet the first warden as soon as the window opens. */
 export const ELITE_KILLS = 80;
 export const ELITE_WARN = 2.4;
+/** Later wardens are on a fixed clock: 220, 340, 460, … (100 + n×120). */
+export const ELITE_INTERVAL = 120;
+/** Each later warden multiplies base HP by this, then the night's time scale. */
+export const WARDEN_HP_MULT = 1.5;
+/** Surviving this long ends the night. */
+export const DAWN_TIME = 600;
+const HASTE_FLOOR = 0.25;
+const DAMAGE_RANKS = 10;
+const VIGOR_RANKS = 10;
+const CAP_AT_4 = 4 * 60;
+const CAP_AT_6 = 6 * 60;
 
-export function eliteDue(time, kills) {
+/**
+ * First warden still uses the v0.5.0 window (90s at 80 kills, otherwise 100s).
+ * Appearance 1, 2, 3… are due at 220, 340, 460… regardless of kills.
+ */
+export function eliteDue(time, kills, appearance = 0) {
+  const n = Math.max(0, appearance);
+  if (n > 0) return time >= ELITE_TIME + n * ELITE_INTERVAL;
   if (time < ELITE_MIN_TIME) return false;
   return time >= ELITE_TIME || kills >= ELITE_KILLS;
 }
@@ -49,24 +76,39 @@ const UPGRADES = [
     id: "damage",
     name: "Sharpened Stake",
     blurb: "Each bolt bites deeper.",
+    family: "stake",
+    icon(player) {
+      return player.weaponId;
+    },
+    ranks: DAMAGE_RANKS,
+    level(player) {
+      return player.damageRanks || 0;
+    },
+    maxed: (player) => (player.damageRanks || 0) >= DAMAGE_RANKS,
     detail(player) {
-      return `Damage ${player.damage} → ${player.damage + 5}`;
+      const next = Math.round(player.damage * 1.2);
+      return `Damage ${player.damage} → ${next}`;
     },
     apply(player) {
-      player.damage += 5;
+      player.damage = Math.round(player.damage * 1.2);
+      player.damageRanks = (player.damageRanks || 0) + 1;
     },
   },
   {
     id: "haste",
     name: "Hasty Ritual",
     blurb: "The stake flies more often.",
-    maxed: (player) => player.attackInterval <= 0.16 + 1e-6,
+    family: "stake",
+    icon(player) {
+      return player.weaponId;
+    },
+    maxed: (player) => player.attackInterval <= HASTE_FLOOR + 1e-6,
     detail(player) {
-      const next = Math.max(0.16, player.attackInterval * 0.88);
+      const next = Math.max(HASTE_FLOOR, player.attackInterval * 0.88);
       return `Attack every ${player.attackInterval.toFixed(2)}s → ${next.toFixed(2)}s`;
     },
     apply(player) {
-      player.attackInterval = Math.max(0.16, player.attackInterval * 0.88);
+      player.attackInterval = Math.max(HASTE_FLOOR, player.attackInterval * 0.88);
     },
   },
   {
@@ -86,18 +128,32 @@ const UPGRADES = [
     id: "vigor",
     name: "Sanguine Vigour",
     blurb: "A deeper well of blood, and some of it back.",
+    ranks: VIGOR_RANKS,
+    level(player) {
+      return player.vigorRanks || 0;
+    },
+    maxed: (player) => (player.vigorRanks || 0) >= VIGOR_RANKS,
     detail(player) {
       return `Max HP ${player.maxHp} → ${player.maxHp + 25}, heal 25`;
     },
     apply(player) {
       player.maxHp += 25;
       player.hp = Math.min(player.maxHp, player.hp + 25);
+      player.vigorRanks = (player.vigorRanks || 0) + 1;
     },
   },
   {
     id: "bolts",
     name: "Twin Bolts",
     blurb: "Loose another stake at the same time.",
+    family: "stake",
+    icon(player) {
+      return player.weaponId;
+    },
+    ranks: 5,
+    level(player) {
+      return player.projectileCount;
+    },
     maxed: (player) => player.projectileCount >= 5,
     detail(player) {
       return `Bolts ${player.projectileCount} → ${player.projectileCount + 1}`;
@@ -125,6 +181,14 @@ const UPGRADES = [
     id: "pierce",
     name: "Piercing Ash",
     blurb: "Bolts pass through another foe.",
+    family: "stake",
+    icon(player) {
+      return player.weaponId;
+    },
+    ranks: 4,
+    level(player) {
+      return player.pierce;
+    },
     maxed: (player) => player.pierce >= 3,
     detail(player) {
       return `Extra targets ${player.pierce} → ${player.pierce + 1}`;
@@ -135,13 +199,15 @@ const UPGRADES = [
   },
   {
     id: "censer",
-    name: "Warding Censer",
-    blurb: "A silver censer wakes and sweeps the dark around you.",
+    name: "Lantern",
+    blurb: "A lantern wakes and sweeps the dark around you.",
     family: "censer",
-    available: (player) => !player.censer.owned,
+    icon: "censer",
+    kind: "unlock",
+    available: (player) => !player.censer.owned && roomForWeapon(player),
     weight: () => 5,
     detail() {
-      return "Unlock an orbiting censer (8 damage)";
+      return "Unlock an orbiting lantern (8 damage)";
     },
     apply(player) {
       player.censer.unlock();
@@ -149,9 +215,12 @@ const UPGRADES = [
   },
   {
     id: "censer-orbs",
-    name: "Another Censer",
+    name: "Another Lantern",
     blurb: "Another lamp joins the sweep.",
     family: "censer",
+    icon: "censer",
+    ranks: 4,
+    level: (player) => player.censer.orbs,
     available: (player) => player.censer.owned,
     maxed: (player) => player.censer.orbs >= CENSER_MAX_ORBS,
     detail(player) {
@@ -164,13 +233,16 @@ const UPGRADES = [
   {
     id: "censer-heat",
     name: "Hot Ash",
-    blurb: "The censers burn hotter as they pass.",
+    blurb: "The lanterns burn hotter as they pass.",
     family: "censer",
+    icon: "censer",
+    ranks: 4,
+    level: (player) => 1 + (player.censer.damage - 8) / 4,
     available: (player) => player.censer.owned,
     maxed: (player) => player.censer.damage >= CENSER_MAX_DAMAGE,
     detail(player) {
       const next = Math.min(CENSER_MAX_DAMAGE, player.censer.damage + CENSER_DAMAGE_STEP);
-      return `Censer damage ${player.censer.damage} → ${next}`;
+      return `Lantern damage ${player.censer.damage} → ${next}`;
     },
     apply(player) {
       player.censer.addDamage();
@@ -181,6 +253,9 @@ const UPGRADES = [
     name: "Wider Vigil",
     blurb: "The sweep reaches farther from your side.",
     family: "censer",
+    icon: "censer",
+    ranks: 4,
+    level: (player) => 1 + (player.censer.radius - 78) / 18,
     available: (player) => player.censer.owned,
     maxed: (player) => player.censer.radius >= CENSER_MAX_RADIUS,
     detail(player) {
@@ -193,13 +268,15 @@ const UPGRADES = [
   },
   {
     id: "pyre",
-    name: "Cinder Pyre",
+    name: "Holy Water",
     blurb: "A flask bursts on the nearest foe and keeps burning.",
     family: "pyre",
-    available: (player) => !player.pyre.owned,
+    icon: "pyre",
+    kind: "unlock",
+    available: (player) => !player.pyre.owned && roomForWeapon(player),
     weight: () => 5,
     detail() {
-      return "Unlock a pyre pool (5 damage a tick)";
+      return "Unlock a holy-water pool (5 damage a tick)";
     },
     apply(player) {
       player.pyre.unlock();
@@ -210,6 +287,9 @@ const UPGRADES = [
     name: "Another Flask",
     blurb: "Another flask leaves the hand with the first.",
     family: "pyre",
+    icon: "pyre",
+    ranks: 3,
+    level: (player) => player.pyre.charges,
     available: (player) => player.pyre.owned,
     maxed: (player) => player.pyre.charges >= PYRE_MAX_CHARGES,
     detail(player) {
@@ -224,11 +304,12 @@ const UPGRADES = [
     name: "Hotter Pitch",
     blurb: "The pool bites harder each time it flares.",
     family: "pyre",
+    icon: "pyre",
     available: (player) => player.pyre.owned,
     maxed: (player) => player.pyre.damage >= PYRE_MAX_DAMAGE,
     detail(player) {
       const next = Math.min(PYRE_MAX_DAMAGE, player.pyre.damage + PYRE_DAMAGE_STEP);
-      return `Pyre damage ${player.pyre.damage} → ${next}`;
+      return `Holy water damage ${player.pyre.damage} → ${next}`;
     },
     apply(player) {
       player.pyre.addDamage();
@@ -236,9 +317,10 @@ const UPGRADES = [
   },
   {
     id: "pyre-reach",
-    name: "Wider Pyre",
-    blurb: "The fire spreads farther from where the flask lands.",
+    name: "Wider Pool",
+    blurb: "The water spreads farther from where the flask lands.",
     family: "pyre",
+    icon: "pyre",
     available: (player) => player.pyre.owned,
     maxed: (player) => player.pyre.radius >= PYRE_MAX_RADIUS,
     detail(player) {
@@ -251,10 +333,12 @@ const UPGRADES = [
   },
   {
     id: "cross",
-    name: "Ash Cross",
+    name: "Cross Boomerang",
     blurb: "A cross flies out and cuts again on the way home.",
     family: "cross",
-    available: (player) => !player.cross.owned,
+    icon: "cross",
+    kind: "unlock",
+    available: (player) => !player.cross.owned && roomForWeapon(player),
     weight: () => 5,
     detail() {
       return "Unlock a returning cross (10 damage)";
@@ -268,6 +352,9 @@ const UPGRADES = [
     name: "Another Cross",
     blurb: "Another cross leaves with the first.",
     family: "cross",
+    icon: "cross",
+    ranks: 3,
+    level: (player) => player.cross.count,
     available: (player) => player.cross.owned,
     maxed: (player) => player.cross.count >= CROSS_MAX_COUNT,
     detail(player) {
@@ -282,6 +369,9 @@ const UPGRADES = [
     name: "Heavier Ash",
     blurb: "The cross bites deeper on both passes.",
     family: "cross",
+    icon: "cross",
+    ranks: 4,
+    level: (player) => 1 + (player.cross.damage - 10) / 4,
     available: (player) => player.cross.owned,
     maxed: (player) => player.cross.damage >= CROSS_MAX_DAMAGE,
     detail(player) {
@@ -297,6 +387,7 @@ const UPGRADES = [
     name: "Longer Flight",
     blurb: "The cross travels farther before it turns back.",
     family: "cross",
+    icon: "cross",
     available: (player) => player.cross.owned,
     maxed: (player) => player.cross.range >= CROSS_MAX_RANGE,
     detail(player) {
@@ -307,6 +398,7 @@ const UPGRADES = [
       player.cross.addRange();
     },
   },
+  ...weaponUpgrades(),
 ];
 
 function rollUpgrades(player, count) {
@@ -362,6 +454,16 @@ function rollUpgrades(player, count) {
       break;
     }
   }
+  if (picks.length < count) {
+    const used = new Set(picks.map((upgrade) => upgrade.id));
+    for (const fallback of FALLBACKS) {
+      if (picks.length >= count) break;
+      if (used.has(fallback.id)) continue;
+      if (fallback.maxed && fallback.maxed(player)) continue;
+      picks.push(fallback);
+      used.add(fallback.id);
+    }
+  }
   return picks;
 }
 
@@ -385,13 +487,28 @@ export function spawnIntervalFor(time, kills) {
   return Math.max(0.32, 1.7 / (1 + nightThreat(time, kills) * 0.5));
 }
 
+export function spawnBatchCap(time) {
+  if (time < CAP_AT_4) return 5;
+  if (time < CAP_AT_6) return 6;
+  return 7;
+}
+
 export function spawnCountFor(time, kills) {
-  return Math.min(5, 1 + Math.floor(nightThreat(time, kills) / 1.5));
+  return Math.min(spawnBatchCap(time), 1 + Math.floor(nightThreat(time, kills) / 1.5));
+}
+
+export function enemyCapCeiling(time) {
+  if (time < CAP_AT_4) return 140;
+  if (time < CAP_AT_6) return 180;
+  return 220;
 }
 
 export function maxEnemiesFor(time, kills) {
-  return Math.min(140, Math.round(12 + nightThreat(time, kills) * 14));
+  return Math.min(enemyCapCeiling(time), Math.round(12 + nightThreat(time, kills) * 14));
 }
+
+const buckets = new Map();
+const activeKeys = [];
 
 function hash01(ix, iy) {
   let n = Math.imul(ix | 0, 374761393) + Math.imul(iy | 0, 668265263);
@@ -468,13 +585,23 @@ export class Game {
     this.reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.audio = new AudioBus();
     this.art = null;
-    this.sprites = { player: null, tileset: null };
+    this.sprites = {
+      player: null,
+      tileset: null,
+      enemies: { bat: null, shambler: null, brute: null },
+    };
     this.dpr = 1;
     this.viewW = 800;
     this.viewH = 600;
     this.anim = 0;
     this.lastDt = 0;
     this.lastTs = null;
+    this.showPerf = false;
+    this.fps = 0;
+    this.fpsFrames = 0;
+    this.fpsWindowStart = null;
+    this.characterId = null;
+    this.select = null;
     this.resetWorld();
     this.state = "menu";
   }
@@ -484,18 +611,25 @@ export class Game {
     this.art = art;
     this.sprites.player = art?.playerImage || null;
     this.sprites.tileset = art?.tilesetImage || null;
+    this.sprites.enemies = {
+      bat: art?.enemies?.bat?.image || null,
+      shambler: art?.enemies?.shambler?.image || null,
+      brute: art?.enemies?.brute?.image || null,
+    };
+    bindEnemyArt(art?.enemies);
     applyFx(art?.fx);
     if (this.player) this.player.attachArt(art);
   }
 
   resetWorld() {
-    this.player = new Player(0, 0);
+    this.player = new Player(0, 0, characterById(this.characterId));
     if (this.art) this.player.attachArt(this.art);
     this.enemies = [];
     this.projectiles = [];
     this.crosses = [];
     this.flasks = [];
     this.pools = [];
+    this.bats = [];
     this.gems = [];
     this.particles = [];
     this.floaters = [];
@@ -509,8 +643,26 @@ export class Game {
     this.hurtFlash = 0;
     this.eliteState = "idle";
     this.eliteWarning = null;
+    this.wardenAppearances = 0;
+    this.swarmsSeen = new Set();
     this.omen = "";
     this.omenTimer = 0;
+  }
+
+  togglePerf() {
+    this.showPerf = !this.showPerf;
+    this.ui.setPerfVisible(this.showPerf);
+    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length);
+  }
+
+  sampleFps(ts) {
+    if (this.fpsWindowStart == null) this.fpsWindowStart = ts;
+    this.fpsFrames += 1;
+    const span = ts - this.fpsWindowStart;
+    if (span < 250) return;
+    this.fps = (this.fpsFrames * 1000) / span;
+    this.fpsFrames = 0;
+    this.fpsWindowStart = ts;
   }
 
   toggleMute() {
@@ -528,12 +680,21 @@ export class Game {
     this.canvas.style.height = `${this.viewH}px`;
   }
 
-  start() {
+  /** A run. `characterId` missing or unknown resolves to the hunter. */
+  start(characterId) {
+    this.characterId = characterById(characterId ?? this.characterId).id;
     this.resetWorld();
     this.state = "playing";
     for (let i = 0; i < 4; i += 1) this.spawnAround("shambler");
     this.ui.setMode("playing");
     this.ui.updateHUD(this);
+  }
+
+  /** Character cards. The night does not advance until a choice confirms. */
+  openSelect() {
+    this.state = "select";
+    this.ui.setMode("select");
+    this.select?.open();
   }
 
   frame(ts) {
@@ -545,15 +706,20 @@ export class Game {
     if (document.hidden) dt = 0;
     this.lastDt = dt;
     this.anim += dt;
+    this.sampleFps(ts);
     this.input.setStickContext(this.state === "playing");
     if (this.state === "playing") this.update(dt);
+    else if (this.state === "select") this.select?.paint(this.anim);
+    else if (this.state === "levelup") this.ui.paintLevelCards(this.anim);
     this.draw();
+    if (this.showPerf) this.ui.setPerf(this.fps, this.enemies.length, FX.stats());
     if (this.state === "playing" || this.state === "levelup") this.ui.updateHUD(this);
     requestAnimationFrame((next) => this.frame(next));
   }
 
   update(dt) {
     this.time += dt;
+    this.maybeSwarm();
     this.maybeElite();
     this.updateElite(dt);
     this.player.update(dt, this.input.axis());
@@ -567,7 +733,13 @@ export class Game {
     for (const enemy of this.enemies) enemy.update(dt, this.player);
     this.separateEnemies();
     this.tryAttack();
+    this.updateDagger(dt);
+    this.updateWhip(dt);
+    this.updateScythe(dt);
+    this.updateTorch(dt);
+    this.updateTome(dt);
     this.updateProjectiles(dt);
+    this.updateBats(dt);
     this.updateCenser(dt);
     this.updatePyre(dt);
     this.updateCross(dt);
@@ -600,32 +772,117 @@ export class Game {
   }
 
   spawnBatch() {
-    const count = spawnCountFor(this.time, this.kills);
-    for (let i = 0; i < count; i += 1) {
-      this.makeRoomForSpawn();
-      this.spawnAround(this.pickType());
-    }
+    const cap = this.maxEnemies();
+    if (this.enemies.length >= cap) return;
+    const count = Math.min(spawnCountFor(this.time, this.kills), cap - this.enemies.length);
+    for (let i = 0; i < count; i += 1) this.spawnAround(this.pickType());
   }
 
-  makeRoomForSpawn() {
-    if (this.enemies.length < this.maxEnemies()) return;
+  /**
+   * Drop the farthest ordinary foe so a spawn can take its slot.
+   * Warden and swarm bodies are kept. Their XP is merged into a gem.
+   */
+  cullOneForCap() {
     let farIndex = -1;
     let farDist = -1;
     const px = this.player.x;
     const py = this.player.y;
     for (let i = 0; i < this.enemies.length; i += 1) {
       const enemy = this.enemies[i];
-      if (enemy.type === "warden") continue;
+      if (enemy.type === "warden" || enemy.swarm) continue;
       const dist = (enemy.x - px) ** 2 + (enemy.y - py) ** 2;
       if (dist > farDist) {
         farDist = dist;
         farIndex = i;
       }
     }
-    if (farIndex >= 0) this.enemies.splice(farIndex, 1);
+    if (farIndex < 0) return false;
+    const [removed] = this.enemies.splice(farIndex, 1);
+    this.keepXp(removed);
+    return true;
   }
 
-  spawnAround(typeName) {
+  keepXp(enemy) {
+    const xp = enemy.xp || 0;
+    if (xp <= 0) return;
+    let nearest = null;
+    let best = Infinity;
+    for (const gem of this.gems) {
+      const dist = (gem.x - enemy.x) ** 2 + (gem.y - enemy.y) ** 2;
+      if (dist < best) {
+        best = dist;
+        nearest = gem;
+      }
+    }
+    if (nearest) nearest.addValue(xp);
+    else this.gems.push(new Gem(enemy.x, enemy.y, xp));
+  }
+
+  maybeSwarm() {
+    if (this.time >= CAP_AT_4 && !this.swarmsSeen.has("bats")) {
+      this.swarmsSeen.add("bats");
+      this.spawnEdgeLine("bat", 30);
+    }
+    if (this.time >= CAP_AT_6 && !this.swarmsSeen.has("brutes")) {
+      this.swarmsSeen.add("brutes");
+      this.spawnRing("brute", 12);
+    }
+    if (this.time >= 8 * 60 && !this.swarmsSeen.has("mixed")) {
+      this.swarmsSeen.add("mixed");
+      this.spawnMixed(40);
+    }
+  }
+
+  spawnEdgeLine(typeName, count) {
+    const side = Math.floor(Math.random() * 4);
+    const halfW = this.viewW / 2;
+    const halfH = this.viewH / 2;
+    const pad = 72;
+    const span = side < 2 ? this.viewW : this.viewH;
+    const step = Math.min(28, (span * 0.85) / count);
+    for (let i = 0; i < count; i += 1) {
+      const along = (i - (count - 1) / 2) * step;
+      let x = this.player.x;
+      let y = this.player.y;
+      if (side === 0) {
+        x += along;
+        y -= halfH + pad;
+      } else if (side === 1) {
+        x += along;
+        y += halfH + pad;
+      } else if (side === 2) {
+        x -= halfW + pad;
+        y += along;
+      } else {
+        x += halfW + pad;
+        y += along;
+      }
+      this.pushEnemy(typeName, x, y, true);
+    }
+  }
+
+  spawnRing(typeName, count) {
+    const radius = Math.max(160, Math.min(this.viewW, this.viewH) * 0.36);
+    for (let i = 0; i < count; i += 1) {
+      const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
+      this.pushEnemy(
+        typeName,
+        this.player.x + Math.cos(angle) * radius,
+        this.player.y + Math.sin(angle) * radius,
+        true,
+      );
+    }
+  }
+
+  spawnMixed(count) {
+    const types = ["shambler", "bat", "brute"];
+    for (let i = 0; i < count; i += 1) {
+      const spot = this.offscreenPoint();
+      this.pushEnemy(types[i % types.length], spot.x, spot.y, true);
+    }
+  }
+
+  offscreenPoint() {
     const halfW = this.viewW / 2;
     const halfH = this.viewH / 2;
     const pad = 48 + Math.random() * 80;
@@ -636,7 +893,19 @@ export class Game {
     else if (side === 1) y = this.player.y + halfH + pad;
     else if (side === 2) x = this.player.x - halfW - pad;
     else x = this.player.x + halfW + pad;
-    this.enemies.push(new Enemy(typeName, x, y, this.time));
+    return { x, y };
+  }
+
+  spawnAround(typeName) {
+    const spot = this.offscreenPoint();
+    this.pushEnemy(typeName, spot.x, spot.y, false);
+  }
+
+  pushEnemy(typeName, x, y, swarm) {
+    const enemy = new Enemy(typeName, x, y, this.time);
+    if (swarm) enemy.swarm = true;
+    this.enemies.push(enemy);
+    return enemy;
   }
 
   pruneFarEnemies() {
@@ -689,6 +958,7 @@ export class Game {
           player.damage,
           player.pierce,
           player.projectileLife,
+          player.weaponId,
         ));
       });
     }
@@ -704,16 +974,13 @@ export class Game {
         if (shot.hitIds.has(enemy.id) || enemy.hp <= 0) continue;
         const dist = Math.hypot(shot.x - enemy.x, shot.y - enemy.y);
         if (dist > shot.radius + enemy.radius) continue;
-        enemy.hp -= shot.damage;
-        enemy.hitFlash = 0.09;
         const nx = (enemy.x - shot.x) / (dist || 1);
         const ny = (enemy.y - shot.y) / (dist || 1);
         enemy.x += nx * 7;
         enemy.y += ny * 7;
         shot.hitIds.add(enemy.id);
         shot.hitsLeft -= 1;
-        this.audio.play("hit");
-        this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(shot.damage), "#fff1c2"));
+        this.hitEnemy(enemy, shot.damage, shot.kind || "stake");
       }
       if (shot.hitsLeft > 0 && shot.life > 0) kept.push(shot);
     }
@@ -729,11 +996,8 @@ export class Game {
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0 || enemy.censerCd > 0) continue;
       if (!censer.touches(enemy, spokes)) continue;
-      enemy.hp -= censer.damage;
-      enemy.hitFlash = 0.09;
       enemy.censerCd = censer.hitCooldown;
-      this.audio.play("hit");
-      this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(censer.damage), "#d7e8f8"));
+      this.hitEnemy(enemy, censer.damage, "censer");
     }
   }
 
@@ -777,11 +1041,8 @@ export class Game {
         if (enemy.hp <= 0 || !pool.ready(enemy)) continue;
         const reach = pool.radius + enemy.radius * 0.15;
         if (Math.hypot(enemy.x - pool.x, enemy.y - pool.y) > reach) continue;
-        enemy.hp -= pool.damage;
-        enemy.hitFlash = 0.08;
         pool.mark(enemy);
-        this.audio.play("hit");
-        this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(pool.damage), "#ffc48a"));
+        this.hitEnemy(enemy, pool.damage, "pyre");
       }
       burning.push(pool);
     }
@@ -822,11 +1083,8 @@ export class Game {
         if (enemy.hp <= 0 || !bolt.ready(enemy)) continue;
         const dist = Math.hypot(bolt.x - enemy.x, bolt.y - enemy.y);
         if (dist > bolt.radius + enemy.radius) continue;
-        enemy.hp -= bolt.damage;
-        enemy.hitFlash = 0.09;
         bolt.mark(enemy);
-        this.audio.play("hit");
-        this.floaters.push(new Popup(enemy.x, enemy.y - enemy.radius, String(bolt.damage), "#f0e2cc"));
+        this.hitEnemy(enemy, bolt.damage, "cross");
       }
       kept.push(bolt);
     }
@@ -834,9 +1092,165 @@ export class Game {
     if (this.crosses.length > 16) this.crosses.splice(0, this.crosses.length - 16);
   }
 
+  /** Weapon damage, white flash, numbers, and the pooled hit effect. */
+  hitEnemy(enemy, amount, weaponId) {
+    if (!enemy || enemy.hp <= 0 || amount <= 0) return;
+    const dealt = Math.max(1, Math.round(amount * (this.player.pact || 1)));
+    enemy.hp -= dealt;
+    enemy.hitFlash = FX.FLASH_S;
+    FX.hit(weaponId, enemy.x, enemy.y, {
+      dmg: dealt,
+      crit: false,
+      enemyId: enemy.id,
+      kill: enemy.hp <= 0,
+      boss: enemy.type === "warden",
+    });
+  }
+
+  updateDagger(dt) {
+    const dagger = this.player.dagger;
+    if (!dagger.owned) return;
+    if (dagger.timer > 0) {
+      dagger.timer -= dt;
+      return;
+    }
+    dagger.timer = dagger.interval;
+    const player = this.player;
+    const count = dagger.count;
+    const mid = (count - 1) / 2;
+    for (let i = 0; i < count; i += 1) {
+      const angle = player.moveAim + (i - mid) * 0.16;
+      this.projectiles.push(new Projectile(
+        player.x + Math.cos(angle) * (player.radius + 6),
+        player.y + Math.sin(angle) * (player.radius + 6),
+        Math.cos(angle) * dagger.speed,
+        Math.sin(angle) * dagger.speed,
+        dagger.damage,
+        dagger.pierce,
+        dagger.life,
+        "dagger",
+      ));
+    }
+  }
+
+  updateWhip(dt) {
+    const whip = this.player.whip;
+    if (!whip.owned) return;
+    if (whip.swing > 0) whip.swing = Math.max(0, whip.swing - dt);
+    if (whip.timer > 0) {
+      whip.timer -= dt;
+      return;
+    }
+    whip.timer = whip.interval;
+    whip.swing = 0.22;
+    whip.sign = this.player.faceSign || 1;
+    const signs = whip.both ? [1, -1] : [whip.sign];
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0) continue;
+      for (const sign of signs) {
+        if (!whipHits(this.player, enemy, sign, whip.length)) continue;
+        this.hitEnemy(enemy, whip.damage, "whip");
+        break;
+      }
+    }
+  }
+
+  updateScythe(dt) {
+    const scythe = this.player.scythe;
+    if (!scythe.owned) return;
+    if (scythe.swing > 0) scythe.swing = Math.max(0, scythe.swing - dt);
+    if (scythe.timer > 0) {
+      scythe.timer -= dt;
+      return;
+    }
+    scythe.timer = scythe.interval;
+    scythe.swing = 0.42;
+    const player = this.player;
+    const reach = scythe.radius;
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0) continue;
+      if (Math.hypot(enemy.x - player.x, enemy.y - player.y) > reach + enemy.radius * 0.35) continue;
+      this.hitEnemy(enemy, scythe.damage, "scythe");
+    }
+  }
+
+  updateTorch(dt) {
+    const torch = this.player.torch;
+    if (!torch.owned) return;
+    if (torch.timer > 0) {
+      torch.timer -= dt;
+      return;
+    }
+    torch.timer = torch.interval;
+    const player = this.player;
+    const reach = torch.radius;
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0) continue;
+      if (Math.hypot(enemy.x - player.x, enemy.y - player.y) > reach + enemy.radius * 0.2) continue;
+      this.hitEnemy(enemy, torch.damage, "torch");
+    }
+  }
+
+  updateTome(dt) {
+    const tome = this.player.tome;
+    if (!tome.owned) return;
+    if (tome.timer > 0) {
+      tome.timer -= dt;
+      return;
+    }
+    const living = this.enemies.filter((enemy) => enemy.hp > 0);
+    if (living.length === 0) return;
+    tome.timer = tome.interval;
+    for (let i = 0; i < tome.count; i += 1) {
+      const target = living[Math.floor(Math.random() * living.length)];
+      const angle = Math.random() * Math.PI * 2;
+      this.bats.push(new Bat(
+        this.player.x + Math.cos(angle) * 18,
+        this.player.y + Math.sin(angle) * 18,
+        tome.damage,
+        target,
+      ));
+    }
+  }
+
+  updateBats(dt) {
+    const kept = [];
+    for (const bat of this.bats) {
+      bat.age += dt;
+      bat.life -= dt;
+      if (bat.life <= 0) continue;
+      if (!bat.target || bat.target.hp <= 0) {
+        let next = null;
+        for (let i = 0; i < this.enemies.length; i += 1) {
+          const enemy = this.enemies[(i + (bat.age * 10 | 0)) % this.enemies.length];
+          if (enemy.hp > 0) {
+            next = enemy;
+            break;
+          }
+        }
+        bat.target = next;
+        if (!bat.target) continue;
+      }
+      const dx = bat.target.x - bat.x;
+      const dy = bat.target.y - bat.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      bat.angle = Math.atan2(dy, dx);
+      if (dist <= bat.radius + bat.target.radius) {
+        this.hitEnemy(bat.target, bat.damage, "tome");
+        continue;
+      }
+      const step = bat.speed * dt;
+      bat.x += (dx / dist) * step;
+      bat.y += (dy / dist) * step;
+      kept.push(bat);
+    }
+    this.bats = kept;
+    if (this.bats.length > 24) this.bats.splice(0, this.bats.length - 24);
+  }
+
   maybeElite() {
-    if (this.eliteState !== "idle") return;
-    if (!eliteDue(this.time, this.kills)) return;
+    if (this.eliteState === "warning" || this.eliteState === "alive") return;
+    if (!eliteDue(this.time, this.kills, this.wardenAppearances)) return;
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.min(this.viewW, this.viewH) * 0.36;
     this.eliteWarning = {
@@ -865,7 +1279,9 @@ export class Game {
   spawnWarden() {
     const spot = this.eliteWarning;
     if (!spot || this.eliteState !== "warning") return;
-    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time));
+    const generation = this.wardenAppearances;
+    this.wardenAppearances += 1;
+    this.enemies.push(new Enemy("warden", spot.x, spot.y, this.time, WARDEN_HP_MULT ** generation));
     this.eliteState = "alive";
     this.omen = "The Warden is here";
     this.omenTimer = 2.2;
@@ -896,16 +1312,23 @@ export class Game {
   }
 
   weaponSummary() {
-    const censer = this.player.censer;
-    const pyre = this.player.pyre;
-    const cross = this.player.cross;
+    const player = this.player;
+    const censer = player.censer;
+    const pyre = player.pyre;
+    const cross = player.cross;
+    const starter = player.weaponId === "crossbow" ? "crossbow" : "stake";
+    const kit = {
+      owned: true,
+      damage: player.damage,
+      count: player.projectileCount,
+      interval: player.attackInterval,
+      pierce: player.pierce,
+      speed: player.projectileSpeed,
+    };
+    const empty = { owned: false, damage: 0, count: 0, interval: 0, pierce: 0, speed: 0 };
     return {
-      stake: {
-        damage: this.player.damage,
-        count: this.player.projectileCount,
-        interval: this.player.attackInterval,
-        pierce: this.player.pierce,
-      },
+      stake: starter === "stake" ? kit : empty,
+      crossbow: starter === "crossbow" ? kit : empty,
       censer: {
         owned: censer.owned,
         orbs: censer.orbs,
@@ -926,6 +1349,42 @@ export class Game {
         range: cross.range,
         interval: cross.interval,
       },
+      dagger: {
+        owned: player.dagger.owned,
+        count: player.dagger.count,
+        damage: player.dagger.damage,
+        pierce: player.dagger.pierce,
+        interval: player.dagger.interval,
+      },
+      whip: {
+        owned: player.whip.owned,
+        damage: player.whip.damage,
+        length: player.whip.length,
+        both: player.whip.both,
+        interval: player.whip.interval,
+      },
+      scythe: {
+        owned: player.scythe.owned,
+        damage: player.scythe.damage,
+        radius: player.scythe.radius,
+        interval: player.scythe.interval,
+      },
+      torch: {
+        owned: player.torch.owned,
+        damage: player.torch.damage,
+        radius: player.torch.radius,
+        interval: player.torch.interval,
+      },
+      tome: {
+        owned: player.tome.owned,
+        count: player.tome.count,
+        damage: player.tome.damage,
+        interval: player.tome.interval,
+      },
+      ownedCount: ownedWeaponCount(player),
+      weaponCap: WEAPON_CAP,
+      pact: player.pact,
+      pactStacks: player.pactStacks,
       magnet: {
         radius: this.player.magnetRadius,
         pickupRadius: this.player.pickupRadius,
@@ -936,9 +1395,34 @@ export class Game {
     };
   }
 
+  upgradeIds() {
+    return UPGRADES.map((upgrade) => upgrade.id);
+  }
+
+  fxStats() {
+    return FX.stats();
+  }
+
+  /** Whole-pixel shake. `{x:0,y:0}` once `FX.reset()` has cleared the last night. */
+  fxShake() {
+    return FX.shakeOffset();
+  }
+
+  /** Ids that can still be rolled, before fallbacks fill a short table. */
+  availableOffers() {
+    const capped = ownedWeaponCount(this.player) >= WEAPON_CAP;
+    return UPGRADES.filter((upgrade) => {
+      if (capped && upgrade.kind === "unlock") return false;
+      if (upgrade.available && !upgrade.available(this.player)) return false;
+      if (upgrade.maxed && upgrade.maxed(this.player)) return false;
+      return true;
+    }).map((upgrade) => upgrade.id);
+  }
+
   /** Apply one boon by id. Level-up cards use the same objects. */
   applyUpgrade(id) {
-    const upgrade = UPGRADES.find((entry) => entry.id === id);
+    const upgrade = UPGRADES.find((entry) => entry.id === id)
+      || FALLBACKS.find((entry) => entry.id === id);
     if (!upgrade) return false;
     if (upgrade.available && !upgrade.available(this.player)) return false;
     if (upgrade.maxed && upgrade.maxed(this.player)) return false;
@@ -982,6 +1466,8 @@ export class Game {
       const db = (b.x - px) ** 2 + (b.y - py) ** 2;
       return da - db;
     });
+    const keeper = this.gems[0];
+    for (let i = cap; i < this.gems.length; i += 1) keeper.addValue(this.gems[i].value);
     this.gems.length = cap;
   }
 
@@ -1037,29 +1523,56 @@ export class Game {
 
   separateEnemies() {
     const list = this.enemies;
-    for (let i = 0; i < list.length; i += 1) {
-      for (let j = i + 1; j < list.length; j += 1) {
-        const a = list[i];
-        const b = list[j];
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        let dist = Math.hypot(dx, dy);
-        const min = (a.radius + b.radius) * 0.85;
-        if (dist === 0) {
-          dx = 1;
-          dy = 0;
-          dist = 1;
+    const count = list.length;
+    if (count < 2) return;
+    const cell = 64;
+    activeKeys.length = 0;
+    for (let i = 0; i < count; i += 1) {
+      const enemy = list[i];
+      const key = (Math.floor(enemy.x / cell) + 100000) * 200003 + (Math.floor(enemy.y / cell) + 100000);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = [];
+        buckets.set(key, bucket);
+      }
+      if (bucket.length === 0) activeKeys.push(key);
+      bucket.push(i);
+    }
+    for (let i = 0; i < count; i += 1) {
+      const a = list[i];
+      const cx = Math.floor(a.x / cell);
+      const cy = Math.floor(a.y / cell);
+      for (let oy = -1; oy <= 1; oy += 1) {
+        for (let ox = -1; ox <= 1; ox += 1) {
+          const key = (cx + ox + 100000) * 200003 + (cy + oy + 100000);
+          const bucket = buckets.get(key);
+          if (!bucket) continue;
+          for (let n = 0; n < bucket.length; n += 1) {
+            const j = bucket[n];
+            if (j <= i) continue;
+            const b = list[j];
+            let dx = b.x - a.x;
+            let dy = b.y - a.y;
+            let dist = Math.hypot(dx, dy);
+            const min = (a.radius + b.radius) * 0.85;
+            if (dist === 0) {
+              dx = 1;
+              dy = 0;
+              dist = 1;
+            }
+            if (dist >= min) continue;
+            const push = (min - dist) / 2;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            a.x -= nx * push;
+            a.y -= ny * push;
+            b.x += nx * push;
+            b.y += ny * push;
+          }
         }
-        if (dist >= min) continue;
-        const push = (min - dist) / 2;
-        const nx = dx / dist;
-        const ny = dy / dist;
-        a.x -= nx * push;
-        a.y -= ny * push;
-        b.x += nx * push;
-        b.y += ny * push;
       }
     }
+    for (let i = 0; i < activeKeys.length; i += 1) buckets.get(activeKeys[i]).length = 0;
   }
 
   updateFx(dt) {
@@ -1073,6 +1586,7 @@ export class Game {
     });
     if (this.particles.length > 240) this.particles.splice(0, this.particles.length - 240);
     if (this.floaters.length > 48) this.floaters.splice(0, this.floaters.length - 48);
+    FX.update(dt);
   }
 
   updateCamera(dt) {
@@ -1082,24 +1596,51 @@ export class Game {
   }
 
   finishFrame() {
+    if (this.state !== "playing") return;
     if (this.player.hp <= 0) {
       this.enterGameOver();
       return;
     }
-    if (this.pendingLevels > 0 && this.state === "playing") this.openLevelUp();
+    if (this.pendingLevels > 0) {
+      this.openLevelUp();
+      return;
+    }
+    if (this.time >= DAWN_TIME) this.enterVictory();
+  }
+
+  /** Back to the night. Dawn is checked here, after any open level-up cards. */
+  resumePlay() {
+    this.state = "playing";
+    this.ui.setMode("playing");
+    if (this.player.hp > 0 && this.time >= DAWN_TIME) this.enterVictory();
+  }
+
+  enterVictory() {
+    if (this.state === "victory") return;
+    this.state = "victory";
+    this.pendingLevels = 0;
+    this.currentChoices = [];
+    this.ui.clearLevelCards();
+    this.ui.showDawn({
+      time: this.time,
+      kills: this.kills,
+      level: this.player.level,
+    });
   }
 
   openLevelUp() {
     this.currentChoices = rollUpgrades(this.player, 3);
     if (this.currentChoices.length === 0) {
       this.pendingLevels = 0;
-      this.state = "playing";
-      this.ui.setMode("playing");
+      this.currentChoices = [];
+      this.ui.clearLevelCards();
+      this.resumePlay();
       return;
     }
     this.state = "levelup";
     this.audio.play("level");
-    this.ui.showLevelUp(this.player, this.currentChoices, (index) => this.chooseUpgrade(index));
+    FX.levelUp();
+    this.ui.showLevelUp(this.player, this.currentChoices, (index) => this.chooseUpgrade(index), this.anim);
   }
 
   chooseUpgrade(index) {
@@ -1109,12 +1650,12 @@ export class Game {
     upgrade.apply(this.player);
     this.pendingLevels = Math.max(0, this.pendingLevels - 1);
     this.currentChoices = [];
+    this.ui.clearLevelCards();
     if (this.pendingLevels > 0) {
       this.openLevelUp();
       return;
     }
-    this.state = "playing";
-    this.ui.setMode("playing");
+    this.resumePlay();
   }
 
   enterGameOver() {
@@ -1123,14 +1664,20 @@ export class Game {
     this.player.hp = 0;
     this.pendingLevels = 0;
     this.currentChoices = [];
+    this.ui.clearLevelCards();
     this.audio.play("death");
-    const censer = this.player.censer;
-    const pyre = this.player.pyre;
-    const cross = this.player.cross;
-    const weapons = ["Stake"];
-    if (censer.owned) weapons.push(`Censer ×${censer.orbs}`);
-    if (pyre.owned) weapons.push(`Pyre ×${pyre.charges}`);
-    if (cross.owned) weapons.push(`Cross ×${cross.count}`);
+    const player = this.player;
+    const weapons = [player.weaponId === "crossbow"
+      ? `Crossbow ×${player.projectileCount}`
+      : `Wooden Stake ×${player.projectileCount}`];
+    if (player.censer.owned) weapons.push(`Lantern ×${player.censer.orbs}`);
+    if (player.pyre.owned) weapons.push(`Holy Water ×${player.pyre.charges}`);
+    if (player.cross.owned) weapons.push(`Cross Boomerang ×${player.cross.count}`);
+    if (player.dagger.owned) weapons.push(`Silver Dagger ×${player.dagger.count}`);
+    if (player.whip.owned) weapons.push(player.whip.both ? "Chain Whip ×2" : "Chain Whip");
+    if (player.scythe.owned) weapons.push("Scythe");
+    if (player.torch.owned) weapons.push("Torch");
+    if (player.tome.owned) weapons.push(`Bat Tome ×${player.tome.count}`);
     this.ui.showGameOver({
       time: this.time,
       level: this.player.level,
@@ -1154,6 +1701,9 @@ export class Game {
       shakeY = (Math.random() - 0.5) * this.shake;
       this.shake = Math.max(0, this.shake - 34 * this.lastDt);
     }
+    const kick = FX.shakeOffset();
+    shakeX += kick.x;
+    shakeY += kick.y;
 
     this.drawBackground(ctx, w, h, shakeX, shakeY);
     ctx.save();
@@ -1168,11 +1718,16 @@ export class Game {
     actors.push(this.player);
     actors.sort((a, b) => a.y - b.y);
     for (const actor of actors) actor.draw(ctx, this.anim);
+    this.player.torch.draw(ctx, this.player, this.anim);
+    this.player.whip.draw(ctx, this.player, this.anim);
+    this.player.scythe.draw(ctx, this.player, this.anim);
     this.player.censer.draw(ctx, this.player, this.anim);
     for (const flask of this.flasks) flask.draw(ctx);
     for (const shot of this.projectiles) shot.draw(ctx);
+    for (const bat of this.bats) bat.draw(ctx);
     for (const bolt of this.crosses) bolt.draw(ctx);
     for (const popup of this.floaters) popup.draw(ctx);
+    FX.drawWorld(ctx);
     ctx.restore();
     this.drawVignette(ctx, w, h);
   }
@@ -1300,6 +1855,17 @@ export class Game {
       this.hurtFlash = Math.max(0, this.hurtFlash - 1.15 * this.lastDt);
     }
   }
+}
+
+function whipHits(player, enemy, sign, length) {
+  const x1 = player.x + sign * length;
+  const left = Math.min(player.x, x1);
+  const right = Math.max(player.x, x1);
+  const nearestX = Math.max(left, Math.min(enemy.x, right));
+  const dx = enemy.x - nearestX;
+  const dy = enemy.y - player.y;
+  const reach = 18 + enemy.radius * 0.35;
+  return dx * dx + dy * dy <= reach * reach;
 }
 
 function nearest(origin, enemies, count) {

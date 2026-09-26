@@ -1,0 +1,29 @@
+{
+  "id": "censer",
+  "name": "Lantern",
+  "slug": "lantern",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "orbit.png",
+      "role": "orbit",
+      "frameWidth": 32,
+      "frameHeight": 54,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "none",
+      "primary": true,
+      "description": "the lantern itself with flickering blue flame, for orbiting"
+    }
+  ]
+}

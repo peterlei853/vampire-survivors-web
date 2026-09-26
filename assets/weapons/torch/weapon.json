@@ -1,0 +1,29 @@
+{
+  "id": "torch",
+  "name": "Torch",
+  "slug": "torch",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "aura.png",
+      "role": "aura",
+      "frameWidth": 96,
+      "frameHeight": 96,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "none",
+      "primary": true,
+      "description": "top-down ring of flickering flames, transparent centre; scale to radius 60-110px"
+    }
+  ]
+}

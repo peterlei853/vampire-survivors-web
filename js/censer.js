@@ -1,6 +1,7 @@
-/** Warding Censer: spokes sweep around the hunter and burn what they touch. */
+/** Lantern: the old censer sweep, drawn as orbiting lanterns. */
 
 import { drawStrip, fx } from "./fxart.js";
+import { drawWeapon, hasWeapon } from "./weaponart.js";
 
 export const CENSER_MAX_ORBS = 4;
 export const CENSER_MAX_DAMAGE = 20;
@@ -93,6 +94,17 @@ export class Censer {
   draw(ctx, player, time) {
     if (!this.owned) return;
     const spokes = this.spokes(player);
+    if (hasWeapon("censer", "orbit")) {
+      for (let i = 0; i < spokes.length; i += 1) {
+        const spoke = spokes[i];
+        ctx.save();
+        ctx.translate(spoke.x1, spoke.y1);
+        ctx.imageSmoothingEnabled = false;
+        drawWeapon(ctx, "censer", "orbit", time + i * 0.07, 0, 64, 108);
+        ctx.restore();
+      }
+      return;
+    }
     if (fx.orb) {
       for (let i = 0; i < spokes.length; i += 1) {
         const spoke = spokes[i];

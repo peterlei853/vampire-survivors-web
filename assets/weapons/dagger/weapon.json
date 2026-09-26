@@ -1,0 +1,29 @@
+{
+  "id": "dagger",
+  "name": "Silver Dagger",
+  "slug": "silver_dagger",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "projectile.png",
+      "role": "projectile",
+      "frameWidth": 62,
+      "frameHeight": 62,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "east",
+      "primary": true,
+      "description": "thrown dagger spinning end over end with silver streak arc"
+    }
+  ]
+}

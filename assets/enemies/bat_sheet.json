@@ -1,0 +1,23 @@
+{
+  "type": "bat",
+  "source": "PixelLab: fast-bat",
+  "frameWidth": 68,
+  "frameHeight": 68,
+  "rows": [
+    "south",
+    "south-east",
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west"
+  ],
+  "walkFrames": 1,
+  "bodyBox": {
+    "x": 18,
+    "y": 7,
+    "w": 32,
+    "h": 50
+  }
+}

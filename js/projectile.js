@@ -1,9 +1,10 @@
-/** Auto-aimed stake. `hitsLeft` is 1 plus pierce. */
+/** Auto-aimed stake or crossbow bolt, and thrown daggers. `hitsLeft` is 1 plus pierce. */
 
 import { drawStrip, fx } from "./fxart.js";
+import { drawWeapon, hasWeapon } from "./weaponart.js";
 
 export class Projectile {
-  constructor(x, y, vx, vy, damage, pierce, life) {
+  constructor(x, y, vx, vy, damage, pierce, life, kind = "stake") {
     this.x = x;
     this.y = y;
     this.vx = vx;
@@ -11,11 +12,14 @@ export class Projectile {
     this.damage = damage;
     this.hitsLeft = pierce + 1;
     this.life = life;
-    this.radius = 5;
+    this.radius = kind === "crossbow" ? 7 : 5;
     this.hitIds = new Set();
+    this.kind = kind;
+    this.age = 0;
   }
 
   update(dt) {
+    this.age += dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.life -= dt;
@@ -23,6 +27,16 @@ export class Projectile {
 
   draw(ctx) {
     const angle = Math.atan2(this.vy, this.vx);
+    if (hasWeapon(this.kind, "projectile")) {
+      const frame = this.kind === "dagger" ? 62 : this.kind === "crossbow" ? 54 : 50;
+      const tall = this.kind === "dagger" ? 62 : 32;
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.imageSmoothingEnabled = false;
+      drawWeapon(ctx, this.kind, "projectile", this.age, angle, frame, tall);
+      ctx.restore();
+      return;
+    }
     if (fx.bolt) {
       ctx.save();
       ctx.translate(this.x, this.y);

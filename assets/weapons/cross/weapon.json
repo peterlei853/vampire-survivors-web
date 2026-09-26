@@ -1,0 +1,29 @@
+{
+  "id": "cross",
+  "name": "Holy Cross",
+  "slug": "cross_boomerang",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "projectile.png",
+      "role": "projectile",
+      "frameWidth": 34,
+      "frameHeight": 52,
+      "frames": 7,
+      "fps": 12,
+      "loop": true,
+      "facing": "none",
+      "primary": true,
+      "description": "golden cross flipping around its vertical axis with holy glint"
+    }
+  ]
+}

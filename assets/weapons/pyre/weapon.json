@@ -1,0 +1,41 @@
+{
+  "id": "pyre",
+  "name": "Holy Water",
+  "slug": "holy_water",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "pool.png",
+      "role": "pool",
+      "frameWidth": 80,
+      "frameHeight": 62,
+      "frames": 6,
+      "fps": 12,
+      "loop": true,
+      "facing": "none",
+      "primary": true,
+      "description": "ground pool of flickering blue holy flame with broken vial (looping AoE)"
+    },
+    {
+      "file": "flight.png",
+      "role": "projectile",
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "frames": 8,
+      "fps": 12,
+      "loop": true,
+      "facing": "none",
+      "primary": false,
+      "description": "thrown flask tumbling in flight"
+    }
+  ]
+}

@@ -1,12 +1,14 @@
 /** Survivor stats. Weapons fire from Game; this owns movement, XP, and weapons. */
 
+import { Dagger, Scythe, starterStats, Tome, Torch, Whip } from "./armory.js";
+import { characterById } from "./characters.js";
 import { AshCross } from "./cross.js";
 import { Censer } from "./censer.js";
 import { Pyre } from "./pyre.js";
 
 /** Baseline gem pull. Grave Magnet adds MAGNET_STEP up to MAGNET_MAX. */
-export const MAGNET_BASE = 175;
-export const MAGNET_STEP = 48;
+export const MAGNET_BASE = 110;
+export const MAGNET_STEP = 42;
 export const MAGNET_MAX = 320;
 
 /** Sheet row order: south, then counter-clockwise through the diagonals. */
@@ -54,23 +56,33 @@ export function xpRequiredFor(level) {
 }
 
 export class Player {
-  constructor(x, y) {
+  constructor(x, y, character) {
+    const stats = characterById(character?.id || character);
     this.x = x;
     this.y = y;
     this.radius = 14;
-    this.speed = 168;
-    this.maxHp = 100;
-    this.hp = 100;
+    this.characterId = stats.id;
+    this.speed = stats.speed;
+    this.maxHp = stats.maxHp;
+    this.hp = stats.maxHp;
     this.level = 1;
     this.xp = 0;
     this.xpToNext = xpRequiredFor(1);
-    this.damage = 12;
-    this.attackInterval = 0.56;
+    const kit = starterStats(stats.starter || "stake");
+    this.weaponId = kit.id;
+    this.damage = kit.damage;
+    this.attackInterval = kit.interval;
     this.attackTimer = 0;
-    this.projectileSpeed = 520;
-    this.projectileLife = 1.05;
-    this.projectileCount = 1;
-    this.pierce = 0;
+    this.projectileSpeed = kit.speed;
+    this.projectileLife = kit.life;
+    this.projectileCount = kit.count;
+    this.pierce = kit.pierce;
+    this.damageRanks = 0;
+    this.vigorRanks = 0;
+    this.pact = 1;
+    this.pactStacks = 0;
+    this.moveAim = 0;
+    this.faceSign = 1;
     this.magnetRadius = MAGNET_BASE;
     this.magnetStacks = 0;
     this.pickupRadius = 22;
@@ -84,11 +96,27 @@ export class Player {
     this.censer = new Censer();
     this.pyre = new Pyre();
     this.cross = new AshCross();
+    this.dagger = new Dagger();
+    this.whip = new Whip();
+    this.scythe = new Scythe();
+    this.torch = new Torch();
+    this.tome = new Tome();
   }
 
-  attachArt(art) {
-    this.art = art && art.playerImage ? art : null;
-    const name = this.art?.rows?.[this.facingRow];
+  attachArt(library) {
+    const sheet = library?.characters?.[this.characterId] || library?.characters?.hunter;
+    if (!sheet?.image) {
+      this.art = null;
+      return;
+    }
+    this.art = {
+      playerImage: sheet.image,
+      frameWidth: sheet.frameWidth,
+      frameHeight: sheet.frameHeight,
+      rows: sheet.rows,
+      walkFrames: sheet.walkFrames,
+    };
+    const name = this.art.rows?.[this.facingRow];
     if (name) this.facing = name;
   }
 
@@ -98,10 +126,13 @@ export class Player {
       this.x += axis.x * this.speed * dt;
       this.y += axis.y * this.speed * dt;
       this.aim = Math.atan2(axis.y, axis.x);
+      this.moveAim = this.aim;
       if (!this.moving) this.walkTime = 0;
       this.walkTime += dt;
       this.facingRow = facingIndex(axis.x, axis.y);
       this.facing = this.art?.rows?.[this.facingRow] || FACINGS[this.facingRow];
+      if (this.facingRow === 1 || this.facingRow === 2 || this.facingRow === 3) this.faceSign = 1;
+      else if (this.facingRow === 5 || this.facingRow === 6 || this.facingRow === 7) this.faceSign = -1;
     }
     this.moving = moving;
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - dt);
@@ -143,8 +174,12 @@ export class Player {
     if (this.hp <= 0) ctx.globalAlpha = 0.45;
     else if (this.invuln > 0) ctx.globalAlpha = 0.45 + 0.4 * Math.sin(time * 30);
 
+    const cell = 68;
     const scale = SPRITE_DRAW / frameW;
-    const footY = (FIGURE_FOOT - FIGURE_CY) * scale;
+    const figureCx = FIGURE_CX * (frameW / cell);
+    const figureCy = FIGURE_CY * (frameH / cell);
+    const figureFoot = FIGURE_FOOT * (frameH / cell);
+    const footY = (figureFoot - figureCy) * scale;
     const shadow = ctx.createRadialGradient(0, footY, 2, 0, footY, 24);
     shadow.addColorStop(0, "rgba(0, 0, 0, 0.55)");
     shadow.addColorStop(1, "rgba(0, 0, 0, 0)");
@@ -160,8 +195,8 @@ export class Player {
       this.facingRow * frameH,
       frameW,
       frameH,
-      -FIGURE_CX * scale,
-      -FIGURE_CY * scale,
+      -figureCx * scale,
+      -figureCy * scale,
       SPRITE_DRAW,
       SPRITE_DRAW * (frameH / frameW),
     );

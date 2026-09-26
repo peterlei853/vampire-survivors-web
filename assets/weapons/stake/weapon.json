@@ -1,0 +1,29 @@
+{
+  "id": "stake",
+  "name": "Wooden Stake",
+  "slug": "wooden_stake",
+  "files": [
+    {
+      "file": "icon.png",
+      "role": "icon",
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 1,
+      "fps": 0,
+      "loop": false,
+      "facing": "none"
+    },
+    {
+      "file": "projectile.png",
+      "role": "projectile",
+      "frameWidth": 50,
+      "frameHeight": 32,
+      "frames": 6,
+      "fps": 12,
+      "loop": true,
+      "facing": "east",
+      "primary": true,
+      "description": "flying stake with sparks/splinters bursting at the tip"
+    }
+  ]
+}
